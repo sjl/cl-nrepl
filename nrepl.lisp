@@ -51,6 +51,7 @@
   "Fire up a server thread that will listen for connections."
   (format t "Starting server...~%")
   (let ((socket (usocket:socket-listen address port :reuse-address t)))
+    (build-handler)
     (setf *server-thread*
           (bt:make-thread
             (lambda ()
@@ -91,6 +92,7 @@
 
 (defun wrap-time (h)
   (lambda (message)
+    (format t "In wrap-time...~%")
     (handle-op
       message "time?" h
       (respond message (make-hash "status" "done"
@@ -98,6 +100,7 @@
 
 (defun wrap-eval (h)
   (lambda (message)
+    (format t "In wrap-eval...~%")
     (handle-op
       message "eval" h
       (let ((code (gethash "code" message)))
@@ -105,12 +108,20 @@
                  (make-hash "status" "done"
                             "result" (eval (read-from-string code))))))))
 
-(defparameter *handler*
-  (wrap-eval (wrap-time #'handle-base)))
+(defparameter *middleware*
+  (list
+    #'wrap-eval
+    #'wrap-time))
+
+(defun build-handler (base middleware)
+  (if middleware
+    (funcall (car middleware)
+             (build-handler base (cdr middleware)))
+    base))
 
 (defun handle (message)
   (format t "Handling message:~%~A~%~%" message)
-  (funcall *handler* message))
+  (funcall (build-handler #'handle-base *middleware*) message))
 
 (defun handle-message ()
   (let ((message (read-object)))
@@ -125,3 +136,26 @@
 ; (connect)
 ; (handle-message)
 ; (start-server "localhost" 8675)
+; (stop-server)
+
+; > (first (list 1 2))
+; Message:
+; 'd2:ns4:user7:session36:37b0fdb1-5d6d-4646-aa68-22af41e172bb5:value1:1e'
+; {'ns': 'user', 'session': '37b0fdb1-5d6d-4646-aa68-22af41e172bb', 'value': '1'}
+; >
+; Message:
+; 'd7:session36:37b0fdb1-5d6d-4646-aa68-22af41e172bb6:statusl4:doneee'
+; {'session': '37b0fdb1-5d6d-4646-aa68-22af41e172bb', 'status': ['done']}
+
+; TODO
+; * Implement middleware metadata
+; * Implement middleware linearization
+; * Implement sessions
+; * Implement Fireplace workarounds
+;
+;   * Look for what ops fireplace needs
+;   * Look into how fireplace handles clojure namespaces
+;   * Implement a minimal amount of fireplace ops (eval, reload, doc)
+;   * Implement a minimal amount of fireplace workarounds
+;
+; * Implement other nrepl default ops
