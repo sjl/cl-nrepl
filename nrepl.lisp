@@ -5,6 +5,12 @@
 (ql:quickload "flexi-streams")
 (ql:quickload "bordeaux-threads")
 
+(require 'sb-introspect)
+
+
+;;;; Variables ----------------------------------------------------------------
+(defvar *server-thread* nil)
+
 
 ;;;; Utilities ----------------------------------------------------------------
 (defun make-hash (&rest keyvals)
@@ -13,17 +19,44 @@
     ((not kvs) h)
     (setf (gethash (first kvs) h) (second kvs))))
 
+(defmacro when-let (bindings &rest body)
+  (labels ((build (bindings body)
+             (if (not bindings)
+               body
+               `(let ((,(caar bindings) ,(cadar bindings)))
+                  (when ,(caar bindings)
+                    ,(build (cdr bindings) body))))))
+    (build bindings `(progn ,@body))))
+
+(defun set-when (h &rest keyvals)
+  (loop for (key val) on keyvals by #'cddr
+        do (when val (setf (gethash key h) val))))
+
 (defmethod print-object ((object hash-table) stream)
   (format stream "#HASH{~{~{(~a : ~a)~}~^ ~}}"
           (loop for key being the hash-keys of object
                 using (hash-value value)
                 collect (list key value))))
 
+(defun read-all-from-string (s)
+  (labels ((read-next-from-string (s results)
+             (if (equal (string-trim " " s) "")
+               results
+               (multiple-value-bind (i pos) (read-from-string s)
+                 (read-next-from-string (subseq s pos) (cons i results))))))
+    (nreverse (read-next-from-string s ()))))
+
+(defmacro comment (&rest body)
+  (declare (ignore body))
+  nil)
+
+
+(defun curry (fn &rest curried-args)
+  (lambda (&rest args)
+    (apply fn (append curried-args args))))
+
 
 ;;;; Sockets ------------------------------------------------------------------
-(defvar *server-thread* nil)
-(defvar *socket* nil)
-
 (defun get-stream (sock)
   "Make a flexi stream of the kind bencode wants from the socket."
   (flex:make-flexi-stream
@@ -31,19 +64,142 @@
     :external-format :utf-8))
 
 
+(defun write-object (socket lock o)
+  "Write an object O (bencoded) to SOCKET while holding LOCK."
+  (bt:with-lock-held (lock)
+                     (bencode:encode o (get-stream socket))
+                     (force-output (get-stream socket))))
+
+(defun read-object (socket)
+  "Read an object (and bdecode it) from *socket*."
+  (bencode:decode (get-stream socket)))
+
+
+;;;; NREPL --------------------------------------------------------------------
+;;; Utils
+(defun respond (message response)
+  (funcall (gethash "transport" message) response))
+
+(defmacro handle-op (message op fallback &rest body)
+  `(if (equal ,op (gethash "op" ,message))
+     (progn ,@body)
+     (funcall ,fallback ,message)))
+
+
+;;; Sessions
+;;; Eval
+
+;;; Handlers and Middleware
+(defun handle-base (message)
+  (respond message (make-hash "status" "unknown-op")))
+
+
+
+
+(defun shuttle-stream (from-stream stream-name message)
+  (do ((data "" (flex:octets-to-string
+                  (flex:get-output-stream-sequence from-stream)
+                  :external-format :utf-8)))
+    ((and (not (open-stream-p from-stream))
+          (equal data ""))
+     nil)
+    (when (not (equal data ""))
+      (respond message (make-hash "status" "ok"
+                                  stream-name data)))
+    (sleep 0.1)))
+
+(defun wrap-eval (h)
+  (lambda (message)
+    (handle-op
+      message "eval" h
+      (let* ((code (gethash "code" message))
+             (captured-out (flex:make-in-memory-output-stream))
+             (captured-err (flex:make-in-memory-output-stream))
+             (*standard-output*
+               (flex:make-flexi-stream captured-out
+                                       :external-format :utf-8)))
+        (unwind-protect
+          (progn
+            (bt:make-thread
+              (lambda () (shuttle-stream captured-out "stdout" message))
+              :name "NREPL stdout writer")
+            (loop for form in (read-all-from-string code)
+                  do (let ((result (prin1-to-string (eval form))))
+                       (respond message
+                                (make-hash "status" "done"
+                                           "form" (prin1-to-string form)
+                                           "value" result)))))
+          (close captured-out)
+          (close captured-err))))))
+
+
+
+
+(defun find-lambda-list (s)
+  (when (fboundp s)
+    (sb-introspect:function-lambda-list s)))
+
+(defun wrap-documentation (h)
+  (lambda (message)
+    (handle-op
+      message "documentation" h
+      (let* ((s (find-symbol (string-upcase (gethash "symbol" message))))
+             (resp (make-hash "status" "done")))
+        (set-when resp
+                  "type-docstring" (documentation s 'type)
+                  "function-docstring" (documentation s 'function)
+                  "function-arglist" (when-let ((arglist (find-lambda-list s)))
+                                       (prin1-to-string arglist)))
+        (respond message resp)))))
+
+
+;;; Plumbing
+(defun middleware ()
+  "Return the stack of middleware.
+
+   In the future we should make this less horrifyingly inefficient, but for
+   NREPL development its_fine.
+
+   "
+  (list
+    #'wrap-eval
+    #'wrap-documentation))
+
+(defun build-handler (base middleware)
+  "Collapse the stack of middleware into a single handler function."
+  (if middleware
+    (funcall (car middleware)
+             (build-handler base (cdr middleware)))
+    base))
+
+(defun handle (message)
+  "Handle the given NREPL message."
+  (format t "Handling message:~%~A~%~%" message)
+  (funcall (build-handler #'handle-base (middleware)) message))
+
+(defun handle-message (socket lock)
+  "Read a single message from the socket and handle it."
+  (let ((message (read-object socket)))
+    (setf (gethash "transport" message)
+          (curry #'write-object socket lock))
+    (handle message)))
+
+(defun handler (socket lock)
+  "Read a series of messages from the socket, handling each."
+  (loop (handle-message socket lock)))
+
+
+;;;; Server -------------------------------------------------------------------
 (defun accept-connections (server-socket)
   "Accept connections to the server and spawn threads to handle each."
   (loop
-    (format t "Waiting for a connection...~%")
-    (let ((client-socket (usocket:socket-accept server-socket
-                                                :element-type '(unsigned-byte 8))))
-      (format t "Connection received.  Spinning up handler thread...~%")
+    (let ((client-socket (usocket:socket-accept
+                           server-socket
+                           :element-type '(unsigned-byte 8)))
+          (write-lock (bt:make-lock "NREPL client writing lock")))
       (bt:make-thread
         (lambda ()
-          (unwind-protect
-            (let ((*socket* client-socket))
-              (handler))
-            (format t "Closing client connection...~%")
+          (unwind-protect (handler client-socket write-lock)
             (usocket:socket-close client-socket)))
         :name "NREPL Connection Handler"))))
 
@@ -51,7 +207,6 @@
   "Fire up a server thread that will listen for connections."
   (format t "Starting server...~%")
   (let ((socket (usocket:socket-listen address port :reuse-address t)))
-    (build-handler)
     (setf *server-thread*
           (bt:make-thread
             (lambda ()
@@ -68,84 +223,12 @@
       (bt:destroy-thread s))))
 
 
-(defun write-object (o)
-  "Write an object (bencoded) to *socket*."
-  (bencode:encode o (get-stream *socket*))
-  (force-output (get-stream *socket*)))
-
-(defun read-object ()
-  "Read an object (and bdecode it) from *socket*."
-  (bencode:decode (get-stream *socket*)))
-
-
-;;;; NREPL --------------------------------------------------------------------
-(defun respond (message response)
-  (funcall (gethash "transport" message) response))
-
-(defmacro handle-op (message op fallback &rest body)
-  `(if (equal ,op (gethash "op" ,message))
-     (progn ,@body)
-     (funcall ,fallback ,message)))
-
-(defun handle-base (message)
-  (respond message (make-hash "status" "unknown-op")))
-
-(defun wrap-time (h)
-  (lambda (message)
-    (format t "In wrap-time...~%")
-    (handle-op
-      message "time?" h
-      (respond message (make-hash "status" "done"
-                                  "time" (get-universal-time))))))
-
-(defun wrap-eval (h)
-  (lambda (message)
-    (format t "In wrap-eval...~%")
-    (handle-op
-      message "eval" h
-      (let ((code (gethash "code" message)))
-        (respond message
-                 (make-hash "status" "done"
-                            "result" (eval (read-from-string code))))))))
-
-(defparameter *middleware*
-  (list
-    #'wrap-eval
-    #'wrap-time))
-
-(defun build-handler (base middleware)
-  (if middleware
-    (funcall (car middleware)
-             (build-handler base (cdr middleware)))
-    base))
-
-(defun handle (message)
-  (format t "Handling message:~%~A~%~%" message)
-  (funcall (build-handler #'handle-base *middleware*) message))
-
-(defun handle-message ()
-  (let ((message (read-object)))
-    (setf (gethash "transport" message) #'write-object)
-    (handle message)))
-
-(defun handler ()
-  (loop (handle-message)))
-
-
 ;;;; Scratch ------------------------------------------------------------------
-; (connect)
-; (handle-message)
-; (start-server "localhost" 8675)
-; (stop-server)
-
-; > (first (list 1 2))
-; Message:
-; 'd2:ns4:user7:session36:37b0fdb1-5d6d-4646-aa68-22af41e172bb5:value1:1e'
-; {'ns': 'user', 'session': '37b0fdb1-5d6d-4646-aa68-22af41e172bb', 'value': '1'}
-; >
-; Message:
-; 'd7:session36:37b0fdb1-5d6d-4646-aa68-22af41e172bb6:statusl4:doneee'
-; {'session': '37b0fdb1-5d6d-4646-aa68-22af41e172bb', 'status': ['done']}
+(comment
+  (connect)
+  (handle-message)
+  (start-server "localhost" 8675)
+  (stop-server))
 
 ; TODO
 ; * Implement middleware metadata
@@ -159,3 +242,13 @@
 ;   * Implement a minimal amount of fireplace workarounds
 ;
 ; * Implement other nrepl default ops
+(comment
+  (defparameter s (flex:make-in-memory-output-stream))
+  (defparameter fs (flex:make-flexi-stream s :external-format :utf-8))
+  (close s)
+  (close fs)
+  (format fs "")
+  (format s "Hello, world!~%")
+  (open-stream-p s)
+  (open-stream-p fs)
+  (flex:octets-to-string (flex:get-output-stream-sequence s) :external-format :utf-8))
