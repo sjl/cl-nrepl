@@ -50,7 +50,6 @@
   (declare (ignore body))
   nil)
 
-
 (defun curry (fn &rest curried-args)
   (lambda (&rest args)
     (apply fn (append curried-args args))))
@@ -78,6 +77,7 @@
 ;;;; NREPL --------------------------------------------------------------------
 ;;; Utils
 (defun respond (message response)
+  (set-when response "id" (gethash "id" message))
   (funcall (gethash "transport" message) response))
 
 (defmacro handle-op (message op fallback &rest body)
@@ -92,8 +92,6 @@
 ;;; Handlers and Middleware
 (defun handle-base (message)
   (respond message (make-hash "status" "unknown-op")))
-
-
 
 
 (defun shuttle-stream (from-stream stream-name message)
@@ -117,12 +115,18 @@
              (captured-err (flex:make-in-memory-output-stream))
              (*standard-output*
                (flex:make-flexi-stream captured-out
+                                       :external-format :utf-8))
+             (*error-output*
+               (flex:make-flexi-stream captured-err
                                        :external-format :utf-8)))
         (unwind-protect
           (progn
             (bt:make-thread
               (lambda () (shuttle-stream captured-out "stdout" message))
               :name "NREPL stdout writer")
+            (bt:make-thread
+              (lambda () (shuttle-stream captured-err "stderr" message))
+              :name "NREPL stderr writer")
             (loop for form in (read-all-from-string code)
                   do (let ((result (prin1-to-string (eval form))))
                        (respond message
@@ -133,20 +137,33 @@
           (close captured-err))))))
 
 
-
-
 (defun find-lambda-list (s)
   (when (fboundp s)
     (sb-introspect:function-lambda-list s)))
+
+(defun find-symbol-harder (name)
+  (flet ((split-string (s delim)
+           (let ((idx (position delim s)))
+             (if idx
+               (cons (subseq s 0 idx)
+                     (subseq s (1+ idx)))
+               (cons nil s)))))
+    (destructuring-bind (pack . symb) (split-string (string-upcase name) #\:)
+      (find-symbol symb (if pack
+                          (find-package pack)
+                          *package*)))))
 
 (defun wrap-documentation (h)
   (lambda (message)
     (handle-op
       message "documentation" h
-      (let* ((s (find-symbol (string-upcase (gethash "symbol" message))))
+      (let* ((s (find-symbol-harder (gethash "symbol" message)))
              (resp (make-hash "status" "done")))
         (set-when resp
                   "type-docstring" (documentation s 'type)
+                  "structure-docstring" (documentation s 'structure)
+                  "variable-docstring" (documentation s 'variable)
+                  "setf-docstring" (documentation s 'setf)
                   "function-docstring" (documentation s 'function)
                   "function-arglist" (when-let ((arglist (find-lambda-list s)))
                                        (prin1-to-string arglist)))
@@ -235,13 +252,13 @@
 ; * Implement middleware linearization
 ; * Implement sessions
 ; * Implement Fireplace workarounds
-;
 ;   * Look for what ops fireplace needs
 ;   * Look into how fireplace handles clojure namespaces
 ;   * Implement a minimal amount of fireplace ops (eval, reload, doc)
 ;   * Implement a minimal amount of fireplace workarounds
-;
 ; * Implement other nrepl default ops
+; * Check that we're not leaking threads
+; * Check that we're not leaking objects
 (comment
   (defparameter s (flex:make-in-memory-output-stream))
   (defparameter fs (flex:make-flexi-stream s :external-format :utf-8))
