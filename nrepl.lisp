@@ -4,6 +4,7 @@
 (ql:quickload "usocket")
 (ql:quickload "flexi-streams")
 (ql:quickload "bordeaux-threads")
+(ql:quickload "uuid")
 
 (require 'sb-introspect)
 
@@ -54,6 +55,13 @@
   (lambda (&rest args)
     (apply fn (append curried-args args))))
 
+(defun random-uuid ()
+  (format nil "~a" (uuid:make-v4-uuid)))
+
+(defun hash-keys (h)
+  (loop for key being the hash-keys of h
+        collect key))
+
 
 ;;;; Sockets ------------------------------------------------------------------
 (defun get-stream (sock)
@@ -87,9 +95,44 @@
 
 
 ;;; Sessions
-;;; Eval
+(defvar *sessions* (make-hash-table :test #'equal))
 
-;;; Handlers and Middleware
+(defun create-session! (id)
+  (setf (gethash id *sessions*)
+        (make-hash-table :test #'equal)))
+
+(defun get-session (id)
+  (gethash id *sessions*))
+
+(defun remove-session! (id)
+  (remhash id *sessions*))
+
+(defun get-sessions ()
+  (hash-keys *sessions*))
+
+(defun wrap-session-ls (h)
+  (lambda (message)
+    (handle-op
+      message "ls-sessions" h
+      (respond message
+               (make-hash "status" "done"
+                          "session" (get-sessions))))))
+
+(defun wrap-session-close (h)
+  (lambda (message)
+    (handle-op
+      message "close" h
+      (remove-session! (gethash "session" message))
+      (respond message
+               (make-hash "status" "session-closed")))))
+
+
+;;; Eval
+(defclass evaluator ()
+  ((standard-input :initarg :in :reader in)
+   (standard-output :initarg :out :reader out)
+   (standard-error :initarg :err :reader err)))
+
 (defun handle-base (message)
   (respond message (make-hash "status" "unknown-op")))
 
@@ -114,11 +157,14 @@
              (captured-out (flex:make-in-memory-output-stream))
              (captured-err (flex:make-in-memory-output-stream))
              (*standard-output*
-               (flex:make-flexi-stream captured-out
-                                       :external-format :utf-8))
+               (flex:make-flexi-stream captured-out :external-format :utf-8))
              (*error-output*
-               (flex:make-flexi-stream captured-err
-                                       :external-format :utf-8)))
+               (flex:make-flexi-stream captured-err :external-format :utf-8))
+             (evaluator (make-instance 'evaluator
+                                       :in nil
+                                       :out captured-out
+                                       :err captured-err)))
+        (declare (ignore evaluator))
         (unwind-protect
           (progn
             (bt:make-thread
@@ -179,6 +225,8 @@
 
    "
   (list
+    #'wrap-session-ls
+    #'wrap-session-close
     #'wrap-eval
     #'wrap-documentation))
 
@@ -247,6 +295,7 @@
   (start-server "localhost" 8675)
   (stop-server))
 
+
 ; TODO
 ; * Implement middleware metadata
 ; * Implement middleware linearization
@@ -269,3 +318,4 @@
   (open-stream-p s)
   (open-stream-p fs)
   (flex:octets-to-string (flex:get-output-stream-sequence s) :external-format :utf-8))
+
