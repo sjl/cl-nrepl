@@ -29,6 +29,12 @@
                     ,(build (cdr bindings) body))))))
     (build bindings `(progn ,@body))))
 
+(defmacro if-let (bindings then else)
+  `(let (,@bindings)
+     (if (and ,@(mapcar #'car bindings))
+       ,then
+       ,else)))
+
 (defun set-when (h &rest keyvals)
   (loop for (key val) on keyvals by #'cddr
         do (when val (setf (gethash key h) val))))
@@ -85,7 +91,9 @@
 ;;;; NREPL --------------------------------------------------------------------
 ;;; Utils
 (defun respond (message response)
-  (set-when response "id" (gethash "id" message))
+  (set-when response
+            "id" (gethash "id" message)
+            "session" (gethash "session" message))
   (funcall (gethash "transport" message) response))
 
 (defmacro handle-op (message op fallback &rest body)
@@ -96,6 +104,10 @@
 
 ;;; Sessions
 (defvar *sessions* (make-hash-table :test #'equal))
+(defvar *session* nil)
+
+(defun clear-sessions! ()
+  (setf *sessions* (make-hash-table :test #'equal)))
 
 (defun create-session! (id)
   (setf (gethash id *sessions*)
@@ -109,6 +121,25 @@
 
 (defun get-sessions ()
   (hash-keys *sessions*))
+
+
+(defun wrap-session (h)
+  "Handle wrapping incoming messages in sessions.
+
+   If a message comes in without a session id, create a new session for it and
+   patch the session id into the message before continuing on down the
+   middleware stack.
+
+   Also binds *session* for easier access.  Might rethink this later.
+
+   "
+  (lambda (message)
+    (when (not (gethash "session" message))
+      (let ((session-id (random-uuid)))
+        (create-session! session-id)
+        (setf (gethash "session" message) session-id)))
+    (let ((*session* (get-session (gethash "session" message))))
+      (funcall h message))))
 
 (defun wrap-session-ls (h)
   (lambda (message)
@@ -176,9 +207,9 @@
             (loop for form in (read-all-from-string code)
                   do (let ((result (prin1-to-string (eval form))))
                        (respond message
-                                (make-hash "status" "done"
-                                           "form" (prin1-to-string form)
-                                           "value" result)))))
+                                (make-hash "form" (prin1-to-string form)
+                                           "value" result))))
+            (respond message (make-hash "status" "done")))
           (close captured-out)
           (close captured-err))))))
 
@@ -225,6 +256,7 @@
 
    "
   (list
+    #'wrap-session
     #'wrap-session-ls
     #'wrap-session-close
     #'wrap-eval
