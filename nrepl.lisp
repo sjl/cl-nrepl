@@ -5,6 +5,7 @@
 (ql:quickload "flexi-streams")
 (ql:quickload "bordeaux-threads")
 (ql:quickload "uuid")
+(ql:quickload "fset")
 
 (require 'sb-introspect)
 
@@ -109,15 +110,17 @@
 (defun clear-sessions! ()
   (setf *sessions* (make-hash-table :test #'equal)))
 
-(defun create-session! (id)
-  (setf (gethash id *sessions*)
-        (make-hash-table :test #'equal)))
+(defun create-session ()
+  (make-hash-table :test #'equal))
 
-(defun get-session (id)
-  (gethash id *sessions*))
+(defun register-session! (id session)
+  (setf (gethash id *sessions*) session))
 
 (defun remove-session! (id)
   (remhash id *sessions*))
+
+(defun get-session (id)
+  (gethash id *sessions*))
 
 (defun get-sessions ()
   (hash-keys *sessions*))
@@ -126,19 +129,23 @@
 (defun wrap-session (h)
   "Handle wrapping incoming messages in sessions.
 
+   If a message contains a session key, look up that session in the list of
+   registered sessions and bind it into *session*.
+
    If a message comes in without a session id, create a new session for it and
    patch the session id into the message before continuing on down the
-   middleware stack.
-
-   Also binds *session* for easier access.  Might rethink this later.
+   middleware stack.  Also binds the session into *session*.  Note that this
+   will NOT register the session into the main map of sessions.
 
    "
   (lambda (message)
-    (when (not (gethash "session" message))
-      (let ((session-id (random-uuid)))
-        (create-session! session-id)
-        (setf (gethash "session" message) session-id)))
-    (let ((*session* (get-session (gethash "session" message))))
+    (let* ((session-id (gethash "session" message))
+           (session (if session-id
+                      (get-session session-id)
+                      (create-session)))
+           (session-id (or session-id (random-uuid)))
+           (*session* session))
+      (setf (gethash "session" message) session-id)
       (funcall h message))))
 
 (defun wrap-session-ls (h)
@@ -147,7 +154,7 @@
       message "ls-sessions" h
       (respond message
                (make-hash "status" "done"
-                          "session" (get-sessions))))))
+                          "sessions" (get-sessions))))))
 
 (defun wrap-session-close (h)
   (lambda (message)
