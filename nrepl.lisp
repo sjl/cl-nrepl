@@ -12,6 +12,7 @@
 
 ;;;; Variables ----------------------------------------------------------------
 (defvar *server-thread* nil)
+(defvar *log* *error-output*)
 
 
 ;;;; Utilities ----------------------------------------------------------------
@@ -36,9 +37,27 @@
        ,then
        ,else)))
 
+(defun pairs (l)
+  (loop for (a b) on l by #'cddr
+        collect (cons a b)))
+
+(defun make-map (&rest keyvals)
+  (fset:convert 'fset:map (pairs keyvals)))
+
 (defun set-when (h &rest keyvals)
   (loop for (key val) on keyvals by #'cddr
         do (when val (setf (gethash key h) val))))
+
+(defun with-when (m &rest keyvals)
+  (labels ((build (m keyvals)
+             (if (not keyvals)
+               m
+               (destructuring-bind (k v &rest remaining) keyvals
+                 (build (if v
+                          (fset:with m k v)
+                          m)
+                        remaining)))))
+    (build m keyvals)))
 
 (defmethod print-object ((object hash-table) stream)
   (format stream "#HASH{~{~{(~a : ~a)~}~^ ~}}"
@@ -69,6 +88,9 @@
   (loop for key being the hash-keys of h
         collect key))
 
+(defun l (&rest args)
+  (apply #'format *log* args))
+
 
 ;;;; Sockets ------------------------------------------------------------------
 (defun get-stream (sock)
@@ -79,26 +101,37 @@
 
 
 (defun write-object (socket lock o)
-  "Write an object O (bencoded) to SOCKET while holding LOCK."
+  "Bencode and write a map M to SOCKET while holding LOCK."
   (bt:with-lock-held (lock)
                      (bencode:encode o (get-stream socket))
                      (force-output (get-stream socket))))
 
 (defun read-object (socket)
-  "Read an object (and bdecode it) from *socket*."
-  (bencode:decode (get-stream socket)))
+  "Read a map (and bdecode it) from *socket*."
+  (fset:convert 'fset:map (bencode:decode (get-stream socket))))
+
+
+;;; Patch in support for writing fset data types to bencode
+(defmethod bencode:encode ((fm fset:map) stream &key &allow-other-keys)
+  (bencode:encode (fset:convert 'hash-table fm) stream))
+
+(defmethod bencode:encode ((fs fset:set) stream &key &allow-other-keys)
+  (bencode:encode (fset:convert 'list fs) stream))
+
+(defmethod bencode:encode ((fb fset:bag) stream &key &allow-other-keys)
+  (bencode:encode (fset:convert 'list fb) stream))
 
 
 ;;;; NREPL --------------------------------------------------------------------
 ;;; Utils
 (defun respond (message response)
-  (set-when response
-            "id" (gethash "id" message)
-            "session" (gethash "session" message))
-  (funcall (gethash "transport" message) response))
+  (funcall (fset:lookup message "transport")
+           (with-when response
+                      "id" (fset:lookup message "id")
+                      "session" (fset:lookup message "session"))))
 
 (defmacro handle-op (message op fallback &rest body)
-  `(if (equal ,op (gethash "op" ,message))
+  `(if (equal ,op (fset:lookup ,message "op"))
      (progn ,@body)
      (funcall ,fallback ,message)))
 
@@ -111,7 +144,7 @@
   (setf *sessions* (make-hash-table :test #'equal)))
 
 (defun create-session ()
-  (make-hash-table :test #'equal))
+  (fset:empty-set))
 
 (defun register-session! (id session)
   (setf (gethash id *sessions*) session))
@@ -139,30 +172,28 @@
 
    "
   (lambda (message)
-    (let* ((session-id (gethash "session" message))
+    (let* ((session-id (fset:lookup message "session"))
            (session (if session-id
                       (get-session session-id)
                       (create-session)))
            (session-id (or session-id (random-uuid)))
            (*session* session))
-      (setf (gethash "session" message) session-id)
-      (funcall h message))))
+      (funcall h (fset:with message "session" session-id)))))
 
 (defun wrap-session-ls (h)
   (lambda (message)
     (handle-op
       message "ls-sessions" h
       (respond message
-               (make-hash "status" "done"
-                          "sessions" (get-sessions))))))
+               (make-map "status" "done"
+                         "sessions" (get-sessions))))))
 
 (defun wrap-session-close (h)
   (lambda (message)
     (handle-op
       message "close" h
-      (remove-session! (gethash "session" message))
-      (respond message
-               (make-hash "status" "session-closed")))))
+      (remove-session! (fset:lookup message "session"))
+      (respond message (make-map "status" "session-closed")))))
 
 
 ;;; Eval
@@ -172,7 +203,7 @@
    (standard-error :initarg :err :reader err)))
 
 (defun handle-base (message)
-  (respond message (make-hash "status" "unknown-op")))
+  (respond message (make-map "status" "unknown-op")))
 
 
 (defun shuttle-stream (from-stream stream-name message)
@@ -183,26 +214,21 @@
           (equal data ""))
      nil)
     (when (not (equal data ""))
-      (respond message (make-hash "status" "ok"
-                                  stream-name data)))
+      (respond message (make-map "status" "ok"
+                                 stream-name data)))
     (sleep 0.1)))
 
 (defun wrap-eval (h)
   (lambda (message)
     (handle-op
       message "eval" h
-      (let* ((code (gethash "code" message))
+      (let* ((code (fset:lookup message "code"))
              (captured-out (flex:make-in-memory-output-stream))
              (captured-err (flex:make-in-memory-output-stream))
              (*standard-output*
                (flex:make-flexi-stream captured-out :external-format :utf-8))
              (*error-output*
-               (flex:make-flexi-stream captured-err :external-format :utf-8))
-             (evaluator (make-instance 'evaluator
-                                       :in nil
-                                       :out captured-out
-                                       :err captured-err)))
-        (declare (ignore evaluator))
+               (flex:make-flexi-stream captured-err :external-format :utf-8)))
         (unwind-protect
           (progn
             (bt:make-thread
@@ -214,9 +240,9 @@
             (loop for form in (read-all-from-string code)
                   do (let ((result (prin1-to-string (eval form))))
                        (respond message
-                                (make-hash "form" (prin1-to-string form)
-                                           "value" result))))
-            (respond message (make-hash "status" "done")))
+                                (make-map "form" (prin1-to-string form)
+                                          "value" result))))
+            (respond message (make-map "status" "done")))
           (close captured-out)
           (close captured-err))))))
 
@@ -241,17 +267,16 @@
   (lambda (message)
     (handle-op
       message "documentation" h
-      (let* ((s (find-symbol-harder (gethash "symbol" message)))
-             (resp (make-hash "status" "done")))
-        (set-when resp
-                  "type-docstring" (documentation s 'type)
-                  "structure-docstring" (documentation s 'structure)
-                  "variable-docstring" (documentation s 'variable)
-                  "setf-docstring" (documentation s 'setf)
-                  "function-docstring" (documentation s 'function)
-                  "function-arglist" (when-let ((arglist (find-lambda-list s)))
-                                       (prin1-to-string arglist)))
-        (respond message resp)))))
+      (let* ((s (find-symbol-harder (fset:lookup message "symbol"))))
+        (respond message
+                 (with-when (make-map "status" "done")
+                            "type-docstring" (documentation s 'type)
+                            "structure-docstring" (documentation s 'structure)
+                            "variable-docstring" (documentation s 'variable)
+                            "setf-docstring" (documentation s 'setf)
+                            "function-docstring" (documentation s 'function)
+                            "function-arglist" (when-let ((arglist (find-lambda-list s)))
+                                                 (prin1-to-string arglist))))))))
 
 
 ;;; Plumbing
@@ -262,12 +287,13 @@
    NREPL development its_fine.
 
    "
-  (list
-    #'wrap-session
-    #'wrap-session-ls
-    #'wrap-session-close
-    #'wrap-eval
-    #'wrap-documentation))
+  (reverse
+    (list
+      #'wrap-session
+      #'wrap-session-ls
+      #'wrap-session-close
+      #'wrap-eval
+      #'wrap-documentation)))
 
 (defun build-handler (base middleware)
   "Collapse the stack of middleware into a single handler function."
@@ -278,14 +304,13 @@
 
 (defun handle (message)
   "Handle the given NREPL message."
-  (format t "Handling message:~%~A~%~%" message)
+  (l "Handling message:~%~A~%~%" message)
   (funcall (build-handler #'handle-base (middleware)) message))
 
 (defun handle-message (socket lock)
   "Read a single message from the socket and handle it."
-  (let ((message (read-object socket)))
-    (setf (gethash "transport" message)
-          (curry #'write-object socket lock))
+  (let ((message (fset:with (read-object socket)
+                            "transport" (curry #'write-object socket lock))))
     (handle message)))
 
 (defun handler (socket lock)
@@ -336,6 +361,7 @@
 
 
 ; TODO
+; * Convert to fset
 ; * Implement middleware metadata
 ; * Implement middleware linearization
 ; * Implement sessions
