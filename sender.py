@@ -69,6 +69,9 @@ def repl():
     while True:
         data = raw_input("> ")
         if data.strip():
+            if data == 'quit':
+                return
+
             if data.startswith('\\d'):
                 sock.send(bencode.bencode(build_doc(data[2:])))
             elif data.startswith('\\'):

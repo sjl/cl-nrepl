@@ -6,6 +6,7 @@
 (ql:quickload "bordeaux-threads")
 (ql:quickload "uuid")
 (ql:quickload "fset")
+(ql:quickload "cl-ppcre")
 
 (require 'sb-introspect)
 
@@ -59,6 +60,10 @@
                         remaining)))))
     (build m keyvals)))
 
+(defun with-map (m key f)
+  (let ((val (fset:lookup m key)))
+    (fset:with m key (funcall f val))))
+
 (defmethod print-object ((object hash-table) stream)
   (format stream "#HASH{~{~{(~a : ~a)~}~^ ~}}"
           (loop for key being the hash-keys of object
@@ -88,8 +93,14 @@
   (loop for key being the hash-keys of h
         collect key))
 
+(defun starts-with (prefix str)
+  (string= str prefix :end1 (length prefix)))
+
 (defun l (&rest args)
   (apply #'format *log* args))
+
+(defun p (&rest args)
+  (apply #'format *log* "~a~%" args))
 
 
 ;;;; Sockets ------------------------------------------------------------------
@@ -120,6 +131,93 @@
 
 (defmethod bencode:encode ((fb fset:bag) stream &key &allow-other-keys)
   (bencode:encode (fset:convert 'list fb) stream))
+
+(defmethod bencode:encode ((fb fset:seq) stream &key &allow-other-keys)
+  (bencode:encode (fset:convert 'list fb) stream))
+
+
+;;;; Workarounds --------------------------------------------------------------
+;;; welcome to the jungle
+;;; we've got hacks and strings
+;;; you can get anything you want
+;;; but it better be hacks or strings
+
+; (import traceback)
+
+(defun workaround-matches (l code)
+  (equal (apply #'concatenate 'string l)
+         code))
+
+(defmacro handle-workaround (message fallback op check &rest body)
+  `(if (and (equal ,op (fset:lookup ,message "op"))
+            (,@check (fset:lookup ,message "code")))
+     (progn
+       ,@body
+       (respond ,message (make-map "status" '("done"))))
+     (funcall ,fallback ,message)))
+
+(defun workaround-fireplace-classpath (h)
+  (lambda (message)
+    (handle-workaround
+      message h "eval"
+      (workaround-matches
+        '("(do (println \"success\") "
+          "(symbol (str (System/getProperty \"path.separator\") "
+          "(System/getProperty \"java.class.path\"))))"))
+      (respond message (make-map "value" ":")))))
+
+(defun workaround-fireplace-pathsep (h)
+  (lambda (message)
+    (handle-workaround
+      message h "eval"
+      (workaround-matches
+        '("[(System/getProperty \"path.separator\") "
+          "(System/getProperty \"java.class.path\")]"))
+      (respond message (make-map "value" '("/" ":"))))))
+
+(defun workaround-fireplace-star (h)
+  (lambda (message)
+    (handle-workaround
+      message h "eval"
+      ((lambda (code)
+         (member code '("(*1 1)" "(*2 2)" "(*3 3)") :test #'equal)))
+      (respond message (make-map "value" "Not yet implemented, sorry :(")))))
+
+(defun workaround-fireplace-fakepathsep (h)
+  ; lol what in the fuck even is this for?
+  (lambda (message)
+    (handle-workaround
+      message h "eval"
+      (workaround-matches
+        '("[(System/getProperty \"path.separator\") "
+          "(System/getProperty \"fake.class.path\")]"))
+      (respond message (make-map "value" '("/" "\"None\""))))))
+
+(defun workaround-fireplace-macroexpand-all (h)
+  ; this should really do a macroexpand-all but this'll have to do for now
+  (lambda (message)
+    (handle-workaround
+      message h "eval"
+      (starts-with "(clojure.walk/macroexpand-all (quote")
+      (funcall h (with-map message "code"
+                           (lambda (s)
+                             (ppcre:regex-replace
+                               "clojure.walk/macroexpand-all"
+                               s
+                               "macroexpand")))))))
+
+; (def-workaround (+ "[(symbol (str \"\\n\\b\" (apply str (interleave "
+;                    "(repeat \"\\n\") (map str (.getStackTrace *e)))) "
+;                    "\"\\n\\b\\n\")) *3 *2 *1]")
+;                 [session msg]
+;                 (let [items []]
+;                   (with [session.lock]
+;                     (for [i (traceback.extract-tb session.last-traceback)]
+;                       (.append items (.format "{}({}:{})"
+;                                               (get i 2)
+;                                               (first i)
+;                                               (second i)))))
+;                   (+ "(quote " "[\n\b\n" (.join "\n" items) "\n\b\n nil nil nil]" ")")))
 
 
 ;;;; NREPL --------------------------------------------------------------------
@@ -185,7 +283,7 @@
     (handle-op
       message "ls-sessions" h
       (respond message
-               (make-map "status" "done"
+               (make-map "status" '("done")
                          "sessions" (get-sessions))))))
 
 (defun wrap-session-close (h)
@@ -193,7 +291,7 @@
     (handle-op
       message "close" h
       (remove-session! (fset:lookup message "session"))
-      (respond message (make-map "status" "session-closed")))))
+      (respond message (make-map "status" '("session-closed"))))))
 
 
 ;;; Eval
@@ -203,7 +301,7 @@
    (standard-error :initarg :err :reader err)))
 
 (defun handle-base (message)
-  (respond message (make-map "status" "unknown-op")))
+  (respond message (make-map "status" '("unknown-op"))))
 
 
 (defun shuttle-stream (from-stream stream-name message)
@@ -214,7 +312,7 @@
           (equal data ""))
      nil)
     (when (not (equal data ""))
-      (respond message (make-map "status" "ok"
+      (respond message (make-map "status" '("ok")
                                  stream-name data)))
     (sleep 0.1)))
 
@@ -242,7 +340,7 @@
                        (respond message
                                 (make-map "form" (prin1-to-string form)
                                           "value" result))))
-            (respond message (make-map "status" "done")))
+            (respond message (make-map "status" '("done"))))
           (close captured-out)
           (close captured-err))))))
 
@@ -269,14 +367,15 @@
       message "documentation" h
       (let* ((s (find-symbol-harder (fset:lookup message "symbol"))))
         (respond message
-                 (with-when (make-map "status" "done")
-                            "type-docstring" (documentation s 'type)
-                            "structure-docstring" (documentation s 'structure)
-                            "variable-docstring" (documentation s 'variable)
-                            "setf-docstring" (documentation s 'setf)
-                            "function-docstring" (documentation s 'function)
-                            "function-arglist" (when-let ((arglist (find-lambda-list s)))
-                                                 (prin1-to-string arglist))))))))
+                 (with-when
+                   (make-map "status" '("done"))
+                   "type-docstring" (documentation s 'type)
+                   "structure-docstring" (documentation s 'structure)
+                   "variable-docstring" (documentation s 'variable)
+                   "setf-docstring" (documentation s 'setf)
+                   "function-docstring" (documentation s 'function)
+                   "function-arglist" (when-let ((arglist (find-lambda-list s)))
+                                        (prin1-to-string arglist))))))))
 
 
 ;;; Plumbing
@@ -287,13 +386,18 @@
    NREPL development its_fine.
 
    "
-  (reverse
-    (list
-      #'wrap-session
-      #'wrap-session-ls
-      #'wrap-session-close
-      #'wrap-eval
-      #'wrap-documentation)))
+  (list
+    #'wrap-session
+    #'wrap-session-ls
+    #'wrap-session-close
+    ; just kill me please
+    #'workaround-fireplace-classpath
+    #'workaround-fireplace-pathsep
+    #'workaround-fireplace-star
+    #'workaround-fireplace-fakepathsep
+    #'workaround-fireplace-macroexpand-all
+    #'wrap-eval
+    #'wrap-documentation))
 
 (defun build-handler (base middleware)
   "Collapse the stack of middleware into a single handler function."
@@ -304,7 +408,7 @@
 
 (defun handle (message)
   "Handle the given NREPL message."
-  (l "Handling message:~%~A~%~%" message)
+  (l "Handling message: vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv~%~A~%^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^~%" message)
   (funcall (build-handler #'handle-base (middleware)) message))
 
 (defun handle-message (socket lock)
@@ -354,14 +458,12 @@
 
 ;;;; Scratch ------------------------------------------------------------------
 (comment
-  (connect)
   (handle-message)
   (start-server "localhost" 8675)
   (stop-server))
 
 
 ; TODO
-; * Convert to fset
 ; * Implement middleware metadata
 ; * Implement middleware linearization
 ; * Implement sessions
