@@ -80,7 +80,7 @@ def repl():
                 sock.send(bencode.bencode(build_eval(data)))
 
         try:
-            incoming = sock.recv(4096)
+            incoming = sock.recv(1024*1024) # one megabyte ought to be enough for anybody
             if incoming:
                 print("Message(s):")
                 print(incoming)
