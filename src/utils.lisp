@@ -102,3 +102,10 @@
      (progn ,@body)
      (funcall ,fallback ,message)))
 
+(defmacro defmiddleware (name op message-binding &rest body)
+  (let ((fallback (gensym)))
+  `(defun ,name (,fallback)
+     (lambda (,message-binding)
+       (handle-op ,message-binding ,op ,fallback
+                  ,@body)))))
+

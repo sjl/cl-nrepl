@@ -44,26 +44,17 @@
            (*session* session))
       (funcall h (fset:with message "session" session-id)))))
 
-(defun wrap-session-ls (h)
-  (lambda (message)
-    (handle-op
-      message "ls-sessions" h
-      (respond message
-               (make-map "status" '("done")
-                         "sessions" (get-sessions))))))
+(defmiddleware wrap-session-ls "ls-sessions" message
+  (respond message
+           (make-map "status" '("done")
+                     "sessions" (get-sessions))))
 
-(defun wrap-session-close (h)
-  (lambda (message)
-    (handle-op
-      message "close" h
-      (remove-session! (fset:lookup message "session"))
-      (respond message (make-map "status" '("session-closed"))))))
+(defmiddleware wrap-session-close "close" message
+  (remove-session! (fset:lookup message "session"))
+  (respond message (make-map "status" '("session-closed"))))
 
-(defun wrap-session-clone (h)
-  (lambda (message)
-    (handle-op
-      message "clone" h
-      (let ((new-id (register-session! (random-uuid)
-                                       (fset:lookup message "session"))))
-        (respond message (make-map "status" '("done") "new-session" new-id))))))
+(defmiddleware wrap-session-clone "clone" message
+  (let ((new-id (register-session! (random-uuid)
+                                   (fset:lookup message "session"))))
+    (respond message (make-map "status" '("done") "new-session" new-id))))
 

@@ -6,18 +6,14 @@
             "incremental" incremental
             "version-string" (format nil "~d.~d.~d" major minor incremental)))
 
-(defun wrap-describe (h)
-  (lambda (message)
-    (handle-op
-      message "describe" h
-      (respond message
-               (make-map "status" '("done")
-                         "versions" (make-map
-                                      "lisp" (make-version-map 0 0 0)
-                                      "cl-nrepl" (make-version-map 0 0 0)
-                                      ; we're not nrepl but fireplace wants this
-                                      "nrepl" (make-version-map 0 2 0))
-                         "ops" (make-map))))))
+(defmiddleware wrap-describe "describe" message
+  (respond message
+           (make-map "status" '("done")
+                     "versions" (make-map
+                                  "lisp" (make-version-map 0 0 0)
+                                  "cl-nrepl" (make-version-map 0 0 0))
+                     "ops" (make-map))))
+
 
 ; {'aux': {'current-ns': 'user'},
 ;  'ops': {'clone': {'doc': 'Clones the current session, returning the ID of the newly-created session.',

@@ -13,7 +13,6 @@
                 #:fset
                 #:cl-ppcre
                 #+sbcl :sb-introspect)
-  :serial t
   :components
   ((:file "package")
    (:module "src"

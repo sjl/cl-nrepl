@@ -16,19 +16,16 @@
                           (find-package pack)
                           *package*)))))
 
-(defun wrap-documentation (h)
-  (lambda (message)
-    (handle-op
-      message "documentation" h
-      (let* ((s (find-symbol-harder (fset:lookup message "symbol"))))
-        (respond message
-                 (with-when
-                   (make-map "status" '("done"))
-                   "type-docstring" (documentation s 'type)
-                   "structure-docstring" (documentation s 'structure)
-                   "variable-docstring" (documentation s 'variable)
-                   "setf-docstring" (documentation s 'setf)
-                   "function-docstring" (documentation s 'function)
-                   "function-arglist" (when-let ((arglist (find-lambda-list s)))
-                                        (prin1-to-string arglist))))))))
+(defmiddleware wrap-documentation "documentation" message
+  (let* ((s (find-symbol-harder (fset:lookup message "symbol"))))
+    (respond message
+             (with-when
+               (make-map "status" '("done"))
+               "type-docstring" (documentation s 'type)
+               "structure-docstring" (documentation s 'structure)
+               "variable-docstring" (documentation s 'variable)
+               "setf-docstring" (documentation s 'setf)
+               "function-docstring" (documentation s 'function)
+               "function-arglist" (when-let ((arglist (find-lambda-list s)))
+                                    (prin1-to-string arglist))))))
 
