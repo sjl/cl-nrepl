@@ -26,8 +26,10 @@
                                               "middleware"))
                  (:module "middleware"
                   :depends-on ("utils")
+                  :serial t
                   :components
-                  ((:file "describe")
+                  ((:file "core")
+                   (:file "describe")
                    (:file "documentation")
                    (:file "eval")
                    (:file "session")))))))

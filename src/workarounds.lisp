@@ -17,7 +17,7 @@
        (respond ,message (make-map "status" '("done"))))
      (funcall ,fallback ,message)))
 
-(defmacro defworkaround (name op message-binding &rest body)
+(defmacro define-workaround (name op message-binding &rest body)
   (let ((fallback (gensym)))
     `(defun ,name (,fallback)
        (lambda (,message-binding)
@@ -26,32 +26,32 @@
            ,@body)))))
 
 
-(defworkaround workaround-fireplace-classpath "eval" message
+(define-workaround workaround-fireplace-classpath "eval" message
   (workaround-matches
     '("(do (println \"success\") "
       "(symbol (str (System/getProperty \"path.separator\") "
       "(System/getProperty \"java.class.path\"))))"))
   (respond message (make-map "value" ":")))
 
-(defworkaround workaround-fireplace-pathsep "eval" message
+(define-workaround workaround-fireplace-pathsep "eval" message
   (workaround-matches
     '("[(System/getProperty \"path.separator\") "
       "(System/getProperty \"java.class.path\")]"))
   (respond message (make-map "value" "[\"/\" \":\"]")))
 
-(defworkaround workaround-fireplace-star "eval" message
+(define-workaround workaround-fireplace-star "eval" message
   ((lambda (code)
      (member code '("(*1 1)" "(*2 2)" "(*3 3)") :test #'equal)))
   (respond message (make-map "value" "Not yet implemented, sorry :(")))
 
-(defworkaround workaround-fireplace-fakepathsep "eval" message
+(define-workaround workaround-fireplace-fakepathsep "eval" message
   ; lol what in the fuck even is this for?
   (workaround-matches
     '("[(System/getProperty \"path.separator\") "
       "(System/getProperty \"fake.class.path\")]"))
   (respond message (make-map "value" "[\"/\" \"None\"]")))
 
-(defworkaround workaround-fireplace-macroexpand-all "eval" message
+(define-workaround workaround-fireplace-macroexpand-all "eval" message
   ; this should really do a macroexpand-all but this'll have to do for now
   (starts-with "(clojure.walk/macroexpand-all (quote")
   ; TODO: Fix the extra done status message here

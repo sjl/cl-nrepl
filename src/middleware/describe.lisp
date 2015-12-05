@@ -6,7 +6,7 @@
             "incremental" incremental
             "version-string" (format nil "~d.~d.~d" major minor incremental)))
 
-(defmiddleware wrap-describe "describe" message
+(define-middleware wrap-describe "describe" message
   (respond message
            (make-map "status" '("done")
                      "versions" (make-map

@@ -35,7 +35,7 @@
                   :text "Malformed input!"
                   :orig e))))
 
-(defmiddleware wrap-eval "eval" message
+(define-middleware wrap-eval "eval" message
   (let* ((code (fset:lookup message "code"))
          (captured-out (flex:make-in-memory-output-stream))
          (captured-err (flex:make-in-memory-output-stream))

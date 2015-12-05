@@ -16,7 +16,7 @@
                           (find-package pack)
                           *package*)))))
 
-(defmiddleware wrap-documentation "documentation" message
+(define-middleware wrap-documentation "documentation" message
   (let* ((s (find-symbol-harder (fset:lookup message "symbol"))))
     (respond message
              (with-when
