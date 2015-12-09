@@ -24,6 +24,8 @@
     #'workaround-fireplace-fakepathsep
     #'workaround-fireplace-macroexpand-all
     #'wrap-describe
+    #'wrap-load-file
+    #'wrap-macroexpand
     #'wrap-eval
     #'wrap-documentation))
 

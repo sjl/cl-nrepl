@@ -31,6 +31,8 @@
                   ((:file "core")
                    (:file "describe")
                    (:file "documentation")
+                   (:file "load-file")
+                   (:file "macroexpand")
                    (:file "eval")
                    (:file "session")))))))
 
