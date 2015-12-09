@@ -50,12 +50,6 @@
   (let ((val (fset:lookup m key)))
     (fset:with m key (funcall f val))))
 
-(defmethod print-object ((object hash-table) stream)
-  (format stream "#HASH{~{~{(~a : ~a)~}~^ ~}}"
-          (loop for key being the hash-keys of object
-                using (hash-value value)
-                collect (list key value))))
-
 (defun read-all-from-string (s)
   (labels ((read-next-from-string (s results)
              (if (equal (string-trim " " s) "")
@@ -96,4 +90,11 @@
            (with-when response
                       "id" (fset:lookup message "id")
                       "session" (fset:lookup message "session"))))
+
+
+(defmethod print-object ((object hash-table) stream)
+  (format stream "#HASH{~%~{~{    (~s : ~s)~}~%~}}"
+          (loop for key being the hash-keys of object
+                using (hash-value value)
+                collect (list key value))))
 

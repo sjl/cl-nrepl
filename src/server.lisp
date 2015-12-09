@@ -47,8 +47,10 @@
 
 (defun handler (socket lock)
   "Read a series of messages from the socket, handling each."
+  (p "Client connected...")
   (handler-case (loop (handle-message socket lock))
-    (end-of-file () nil)))
+    (end-of-file () nil))
+  (p "Client disconnected..."))
 
 
 ;;;; Server
@@ -67,7 +69,7 @@
             (usocket:socket-close client-socket)))
         :name "NREPL Connection Handler"))))
 
-(defun start-server (address port)
+(defun start-server (&optional (address "localhost") (port 8675))
   "Fire up a server thread that will listen for connections."
   (format t "Starting server...~%")
   (let ((socket (usocket:socket-listen address port :reuse-address t)))
