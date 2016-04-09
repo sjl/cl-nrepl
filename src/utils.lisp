@@ -3,54 +3,29 @@
 (defvar *log* *error-output*)
 
 
-(defun make-hash (&rest keyvals)
-  (do ((h (make-hash-table :test #'equal))
-       (kvs keyvals (cddr kvs)))
-    ((not kvs) h)
-    (setf (gethash (first kvs) h) (second kvs))))
-
-(defmacro when-let (bindings &rest body)
-  (labels ((build (bindings body)
-             (if (not bindings)
-               body
-               `(let ((,(caar bindings) ,(cadar bindings)))
-                  (when ,(caar bindings)
-                    ,(build (cdr bindings) body))))))
-    (build bindings `(progn ,@body))))
-
-(defmacro if-let (bindings then else)
-  `(let (,@bindings)
-     (if (and ,@(mapcar #'car bindings))
-       ,then
-       ,else)))
-
-(defun pairs (l)
-  (loop for (a b) on l by #'cddr
-        collect (cons a b)))
+(defun pairs (sequence)
+  "Return a list of cons pairs of the items of the riffle `sequence`."
+  (loop :for (a b) :on sequence :by #'cddr
+        :collect (cons a b)))
 
 (defun make-map (&rest keyvals)
+  "Create an fset map of the given riffle of keys and values."
   (fset:convert 'fset:map (pairs keyvals)))
 
-(defun set-when (h &rest keyvals)
-  (loop for (key val) on keyvals by #'cddr
-        do (when val (setf (gethash key h) val))))
-
-(defun with-when (m &rest keyvals)
-  (labels ((build (m keyvals)
-             (if (not keyvals)
-               m
+(defun with-when (map &rest keyvals)
+  "Add the items in the `keyvals` riffle with non-nil values to `map`."
+  (labels ((build (map keyvals)
+             (if (null keyvals)
+               map
                (destructuring-bind (k v &rest remaining) keyvals
                  (build (if v
-                          (fset:with m k v)
-                          m)
+                          (fset:with map k v)
+                          map)
                         remaining)))))
-    (build m keyvals)))
-
-(defun with-map (m key f)
-  (let ((val (fset:lookup m key)))
-    (fset:with m key (funcall f val))))
+    (build map keyvals)))
 
 (defun read-all-from-string (s)
+  "Read all forms in `s` and return them as a list."
   (labels ((read-next-from-string (s results)
              (if (equal (string-trim " " s) "")
                results
@@ -58,24 +33,18 @@
                  (read-next-from-string (subseq s pos) (cons i results))))))
     (nreverse (read-next-from-string s ()))))
 
-(defmacro comment (&rest body)
-  (declare (ignore body))
-  nil)
-
 (defun curry (fn &rest curried-args)
   (lambda (&rest args)
     (apply fn (append curried-args args))))
 
 (defun random-uuid ()
+  "Return a random UUID as a string."
   (format nil "~a" (uuid:make-v4-uuid)))
 
 (defun hash-keys (h)
-  (loop for key being the hash-keys of h
-        collect key))
+  (loop :for key :being :the :hash-keys :of h
+        :collect key))
 
-(defun starts-with (prefix str)
-  (string= str prefix :end1 (min (length str)
-                                 (length prefix))))
 
 (defun l (&rest args)
   (apply #'format *log* args))
@@ -86,15 +55,21 @@
 
 
 (defun respond (message response)
+  "Respond to `message` with the `response` map.
+
+  Takes care of finding the transport and patching the message and session IDs
+  into the response.
+
+  "
   (funcall (fset:lookup message "transport")
            (with-when response
-                      "id" (fset:lookup message "id")
-                      "session" (fset:lookup message "session"))))
+             "id" (fset:lookup message "id")
+             "session" (fset:lookup message "session"))))
 
 
 (defmethod print-object ((object hash-table) stream)
   (format stream "#HASH{~%~{~{    (~s : ~s)~}~%~}}"
-          (loop for key being the hash-keys of object
-                using (hash-value value)
-                collect (list key value))))
+          (loop :for key :being :the :hash-keys :of object
+                :using (hash-value value)
+                :collect (list key value))))
 
