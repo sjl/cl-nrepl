@@ -7,7 +7,6 @@
  \______||_______|       |__| \__| | _| `._____||_______|| _|      |_______|
 ```
 
-An NREPL server for Common Lisp, so you can use Fireplace/Cider/etc to develop
-in Common Lisp.
+An NREPL server for Common Lisp.
 
 **Not ready yet, don't use this.**
