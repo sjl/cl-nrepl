@@ -9,9 +9,11 @@
 (define-middleware wrap-describe "describe" message
   (respond message
            (make-map "status" '("done")
+                     ;; TODO: find actual versions
                      "versions" (make-map
                                   "lisp" (make-version-map 0 0 0)
                                   "cl-nrepl" (make-version-map 0 0 0))
+                     ;; TODO: fill in supported ops
                      "ops" (make-map))))
 
 

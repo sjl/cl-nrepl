@@ -20,21 +20,18 @@
       t)
     (values nil nil)))
 
-
 (defun find-symbol-harder (name)
   "Return the symbol object with the given `name`.
 
-  This should work with:
+  This should work with names like:
 
     FOO (assumes the current package)
     P:FOO (looks in package P)
 
-  TODO: add support for:
-
-    P::FOO
-    :KEYWORD
-
   "
+  ;; TODO: add support for:
+  ;;   P::FOO
+  ;;   :KEYWORD
   (flet ((split-string (s delim)
            (let ((idx (position delim s)))
              (if idx
@@ -45,6 +42,7 @@
       (find-symbol symb (if pack
                           (find-package pack)
                           *package*)))))
+
 
 (define-middleware wrap-documentation "documentation" message
   (let ((s (find-symbol-harder (fset:lookup message "symbol"))))
