@@ -28,9 +28,9 @@
                   :components ((:file "core")
                                (:file "describe")
                                (:file "documentation")
-                               (:file "load-file")
                                (:file "macroexpand")
                                (:file "eval")
+                               (:file "load-file")
                                (:file "session")))
                  (:file "server")))))
 

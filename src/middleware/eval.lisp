@@ -14,26 +14,31 @@
   (do ((data "" (flex:octets-to-string
                   (flex:get-output-stream-sequence from-stream)
                   :external-format :utf-8)))
-    ((and (not (open-stream-p from-stream))
-          (equal data ""))
-     nil)
+      ((and (not (open-stream-p from-stream))
+            (equal data ""))
+       nil)
     (when (not (equal data ""))
       (respond message (make-map "status" '("ok")
                                  stream-name data)))
     (sleep 0.1)))
 
 (defun get-forms (code)
-  "Get all lisp forms from the given hunk of code.
+  "Get all lisp forms from `code`.
 
-   Signal an evaluation-error if the input is mangled.
+  If `code` is a string, the forms will be read out of it, and an
+  `evaluation-error` signaled if the input is mangled.
 
-   "
-  (handler-case
-    (read-all-from-string code)
-    (error (e)
-           (error 'evaluation-error
-                  :text "Malformed input!"
-                  :orig e))))
+  If `code` is anything else it will just be returned as-is.
+
+  "
+  (if (stringp code)
+    (handler-case
+        (read-all-from-string code)
+      (error (e)
+             (error 'evaluation-error
+                    :text "Malformed input!"
+                    :orig e)))
+    code))
 
 (defun clean-backtrace (backtrace)
   (format nil "~{~A~^~%~}"
@@ -64,9 +69,17 @@
                                         #-sbcl "dunno"))))))
       (eval form))))
 
-(define-middleware wrap-eval "eval" message
-  (let* ((code (fset:lookup message "code"))
-         (captured-out (flex:make-in-memory-output-stream))
+(defun evaluate-forms (message forms)
+  "Evaluate each form in `forms` and shuttle back the responses.
+
+  `forms` can be a string, in which case the forms will be read out of it, or
+  a ready-to-go list for actual forms.
+
+  Other middlewares (e.g. `load-file`) can use this function to evaluate things
+  and send the results back to the user.
+
+  "
+  (let* ((captured-out (flex:make-in-memory-output-stream))
          (captured-err (flex:make-in-memory-output-stream))
          (*standard-output*
            (flex:make-flexi-stream captured-out :external-format :utf-8))
@@ -89,14 +102,17 @@
                (lambda () (shuttle-stream stream desc message))
                :name (format nil "NREPL ~A writer" desc))))
       (unwind-protect
-        (progn
-          (make-shuttle-thread captured-out "stdout")
-          (make-shuttle-thread captured-err "stderr")
-          (handler-case
-            (progn
-              (loop for form in (get-forms code) do (eval-form form))
-              (respond message (make-map "status" '("done"))))
-            (evaluation-error (e) (error-respond e))))
+          (progn
+            (make-shuttle-thread captured-out "stdout")
+            (make-shuttle-thread captured-err "stderr")
+            (handler-case
+                (progn
+                  (loop :for form :in (get-forms forms) :do (eval-form form))
+                  (respond message (make-map "status" '("done"))))
+              (evaluation-error (e) (error-respond e))))
         (close captured-out)
         (close captured-err)))))
+
+(define-middleware wrap-eval "eval" message
+  (evaluate-forms message (fset:lookup message "code")))
 
