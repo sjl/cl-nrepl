@@ -23,18 +23,21 @@
   (hash-keys *sessions*))
 
 
-(defun wrap-session (h)
+(defun wrap-session (handler)
   "Handle wrapping incoming messages in sessions.
 
-   If a message contains a session key, look up that session in the list of
-   registered sessions and bind it into *session*.
+  If a message contains a session key, look up that session in the list of
+  registered sessions and bind it into *session*.
 
-   If a message comes in without a session id, create a new session for it and
-   patch the session id into the message before continuing on down the
-   middleware stack.  Also binds the session into *session*.  Note that this
-   will NOT register the session into the main map of sessions.
+  If a message comes in without a session id, create a new session for it and
+  patch the session id into the message before continuing on down the
+  middleware stack.  Also binds the session into *session*.
 
-   "
+  Note that this implicit creation will NOT register the session into the main
+  map of sessions.  To register the session so it'll stick around the client
+  needs to do a `clone` op.
+
+  "
   (lambda (message)
     (let* ((session-id (fset:lookup message "session"))
            (session (if session-id
@@ -42,7 +45,7 @@
                       (create-session)))
            (session-id (or session-id (random-uuid)))
            (*session* session))
-      (funcall h (fset:with message "session" session-id)))))
+      (funcall handler (fset:with message "session" session-id)))))
 
 (define-middleware wrap-session-ls "ls-sessions" message
   (respond message

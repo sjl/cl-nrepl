@@ -73,7 +73,7 @@
   "Evaluate each form in `forms` and shuttle back the responses.
 
   `forms` can be a string, in which case the forms will be read out of it, or
-  a ready-to-go list for actual forms.
+  a ready-to-go list of actual forms.
 
   Other middlewares (e.g. `load-file`) can use this function to evaluate things
   and send the results back to the user.
