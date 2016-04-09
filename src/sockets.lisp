@@ -1,25 +1,15 @@
 (in-package #:nrepl)
 
-(defun get-stream (sock)
-  "Make a flexi stream of the kind bencode wants from the socket."
-  (flex:make-flexi-stream
-    (usocket:socket-stream sock)
-    :external-format :utf-8))
-
-
-(defun write-object (socket lock o)
-  "Bencode and write a map M to SOCKET while holding LOCK."
+;;;; In/out
+(defun write-object (socket-stream lock map)
+  "Bencode and write `map` to `socket-stream` while holding `lock`."
   (bt:with-lock-held (lock)
-                     (bencode:encode o (get-stream socket))
-                     (force-output (get-stream socket))))
+    (bencode:encode map socket-stream)
+    (force-output socket-stream)))
 
-(defun read-object (socket)
-  "Read a map (and bdecode it) from *socket*."
-  (fset:convert 'fset:map
-                ; fireplace's bencoding is fucked.
-                ; just ignore it its fine
-                (handler-bind ((error #'continue))
-                  (bencode:decode (get-stream socket)))))
+(defun read-object (socket-stream)
+  "Read and bdecode a map from `socket-stream`."
+  (fset:convert 'fset:map (bencode:decode socket-stream)))
 
 
 ;;; Patch in support for writing fset data types to bencode

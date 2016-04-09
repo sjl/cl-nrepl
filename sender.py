@@ -10,7 +10,7 @@ from pygments.formatters import TerminalFormatter
 from pprint import pformat
 
 
-ADDRESS = '127.0.0.1'
+ADDRESS = 'localhost'
 PORT = int(sys.argv[1])
 
 def build_eval(data):

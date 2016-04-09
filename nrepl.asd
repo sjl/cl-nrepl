@@ -6,23 +6,22 @@
   :version "0.0.1"
   :license "EPL"
   :depends-on (#:bencode
-                #:usocket
-                #:flexi-streams
-                #:bordeaux-threads
-                #:uuid
-                #:fset
-                #:cl-ppcre
-                #+sbcl :sb-introspect)
+               #:usocket
+               #:flexi-streams
+               #:bordeaux-threads
+               #:uuid
+               #:fset
+               #:cl-ppcre
+               #:split-sequence
+               #+sbcl :sb-introspect)
   :components
   ((:file "package")
    (:module "src"
     :depends-on ("package")
-    :components ((:file "utils" :depends-on ()) 
+    :components ((:file "utils" :depends-on ())
                  (:file "sockets" :depends-on ("utils"))
-                 (:file "workarounds" :depends-on ("utils"))
                  (:file "server" :depends-on ("utils"
                                               "sockets"
-                                              "workarounds"
                                               "middleware"))
                  (:module "middleware"
                   :depends-on ("utils")

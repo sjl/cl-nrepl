@@ -35,6 +35,35 @@
                   :text "Malformed input!"
                   :orig e))))
 
+(defun clean-backtrace (backtrace)
+  (format nil "~{~A~^~%~}"
+          (loop :for line :in (split-sequence:split-sequence #\newline backtrace)
+                :until (ppcre:scan "NREPL::NREPL-EVALUATE-FORM" line)
+                :collect line)))
+
+(defun nrepl-evaluate-form (form)
+  (declare (optimize (debug 3)))
+  ;im so sorry you have to see this
+  (prin1-to-string
+    (handler-bind
+      ((error
+         (lambda (err)
+           ; if we hit an error, print the backtrace to the stream before
+           ; reraising.  if we wait til later to print it, it'll be too late.
+           (error 'evaluation-error
+                  :text "Error during evaluation!"
+                  :orig err
+                  :data (list
+                          "form" (prin1-to-string form)
+                          "backtrace" (clean-backtrace
+                                        #+sbcl (with-output-to-string (s)
+                                                 (sb-debug:print-backtrace
+                                                   :stream s
+                                                   :print-frame-source t
+                                                   :from :interrupted-frame))
+                                        #-sbcl "dunno"))))))
+      (eval form))))
+
 (define-middleware wrap-eval "eval" message
   (let* ((code (fset:lookup message "code"))
          (captured-out (flex:make-in-memory-output-stream))
@@ -44,17 +73,10 @@
          (*error-output*
            (flex:make-flexi-stream captured-err :external-format :utf-8)))
     (flet ((eval-form (form)
-             (handler-case
-               (let ((result (prin1-to-string (eval form))))
-                 (respond message
-                          (make-map "form" (prin1-to-string form)
-                                    "value" result)))
-               (error (e)
-                      (error 'evaluation-error
-                             :text "Traceback during evaluation!"
-                             :orig e
-                             :data (list
-                                     "form" (prin1-to-string form))))))
+             (let ((result (nrepl-evaluate-form form)))
+               (respond message
+                        (make-map "form" (prin1-to-string form)
+                                  "value" result))))
            (error-respond (e)
              (respond message
                       (apply #'make-map
