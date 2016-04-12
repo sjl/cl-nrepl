@@ -27,21 +27,24 @@
 
     FOO (assumes the current package)
     P:FOO (looks in package P)
+    :FOO (keyword)
 
   "
   ;; TODO: add support for:
   ;;   P::FOO
-  ;;   :KEYWORD
   (flet ((split-string (s delim)
            (let ((idx (position delim s)))
              (if idx
                (cons (subseq s 0 idx)
                      (subseq s (1+ idx)))
                (cons nil s)))))
-    (destructuring-bind (pack . symb) (split-string (string-upcase name) #\:)
-      (find-symbol symb (if pack
-                          (find-package pack)
-                          *package*)))))
+    (destructuring-bind (package-name . symbol-name)
+        (split-string (string-upcase name) #\:)
+      (find-symbol symbol-name
+                   (cond
+                     ((null package-name) *package*) ; no : at all
+                     ((string= "" package-name) (find-package "KEYWORD")) ; :keyw
+                     (t (find-package package-name))))))) ; pack:sym
 
 
 (define-middleware wrap-documentation "documentation" message
