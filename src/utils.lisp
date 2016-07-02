@@ -73,3 +73,7 @@
                 :using (hash-value value)
                 :collect (list key value))))
 
+(defun parse-in-package (in-package)
+  (if (null in-package)
+    *package*
+    (find-package (read-from-string in-package))))

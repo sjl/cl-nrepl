@@ -20,7 +20,7 @@
       t)
     (values nil nil)))
 
-(defun find-symbol-harder (name)
+(defun find-symbol-harder (name &optional in-package)
   "Return the symbol object with the given `name`.
 
   This should work with names like:
@@ -40,11 +40,12 @@
                (cons nil s)))))
     (destructuring-bind (package-name . symbol-name)
         (split-string (string-upcase name) #\:)
-      (find-symbol symbol-name
-                   (cond
-                     ((null package-name) *package*) ; no : at all
-                     ((string= "" package-name) (find-package "KEYWORD")) ; :keyw
-                     (t (find-package package-name))))))) ; pack:sym
+      (find-symbol
+        symbol-name
+        (cond
+          ((null package-name) (parse-in-package in-package)) ; no : at all
+          ((string= "" package-name) (find-package "KEYWORD")) ; :keyw
+          (t (find-package package-name))))))) ; pack:sym
 
 
 (define-middleware wrap-documentation "documentation" message
@@ -64,10 +65,12 @@
                    (princ-to-string (cons s arglist))))))))
 
 (define-middleware wrap-arglist "arglist" message
-  (let ((s (find-symbol-harder (fset:lookup message "symbol"))))
+  (let ((s (find-symbol-harder
+             (fset:lookup message "symbol")
+             (fset:lookup message "in-package"))))
     (respond message
              (with-when
-                 (make-map "status" '("done"))
+               (make-map "status" '("done"))
                "function-arglist"
                (multiple-value-bind (arglist foundp)
                    (find-lambda-list s)
