@@ -69,11 +69,18 @@
                                         #-sbcl "dunno"))))))
       (eval form))))
 
-(defun evaluate-forms (message forms)
+(defun parse-in-package (in-package)
+  (if (null in-package)
+    *package*
+    (find-package (read-from-string in-package))))
+
+(defun evaluate-forms (message forms &optional in-package)
   "Evaluate each form in `forms` and shuttle back the responses.
 
   `forms` can be a string, in which case the forms will be read out of it, or
   a ready-to-go list of actual forms.
+
+  `in-package` can be a package designator, or `nil` to just use `*package*`.
 
   Other middlewares (e.g. `load-file`) can use this function to evaluate things
   and send the results back to the user.
@@ -107,12 +114,15 @@
             (make-shuttle-thread captured-err "stderr")
             (handler-case
                 (progn
-                  (loop :for form :in (get-forms forms) :do (eval-form form))
+                  (let ((*package* (parse-in-package in-package)))
+                    (mapc #'eval-form (get-forms forms)))
                   (respond message (make-map "status" '("done"))))
               (evaluation-error (e) (error-respond e))))
         (close captured-out)
         (close captured-err)))))
 
 (define-middleware wrap-eval "eval" message
-  (evaluate-forms message (fset:lookup message "code")))
+  (evaluate-forms message
+                  (fset:lookup message "code")
+                  (fset:lookup message "in-package")))
 
