@@ -34,7 +34,7 @@
       ;; P:FOO -> ("P" "FOO")
       (2 (if (string= (first parts) "")
            (find-package "KEYWORD")
-           (parse-in-package in-package)))
+           (first parts)))
 
       ;; P::FOO -> ("P" "" "FOO")
       (3 (find-package (first parts)))

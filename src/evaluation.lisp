@@ -1,5 +1,7 @@
 (in-package #:nrepl)
 
+(defvar *last-trace* nil)
+
 (define-condition evaluation-error (error)
   ((text :initarg :text :reader text)
    (orig :initarg :orig :reader orig)
@@ -60,34 +62,34 @@
                     :orig e)))
     code))
 
-(defun clean-backtrace (backtrace)
-  (format nil "~{~A~^~%~}"
-          (loop :for line :in (split-sequence:split-sequence #\newline backtrace)
-                :until (ppcre:scan "NREPL::NREPL-EVALUATE-FORM" line)
-                :collect line)))
+
+(defun parse-frame (frame)
+  (list* (dissect:call frame) (dissect:args frame)))
+
+(defun parse-stack (stack)
+  (mapcar #'parse-frame (nthcdr 1 (reverse stack))))
+
+(defun string-trace (stack)
+  (format nil "~{~S~^~%~}" (parse-stack stack)))
 
 (defun nrepl-evaluate-form (form)
   (declare (optimize (debug 3)))
-  ;im so sorry you have to see this
   (prin1-to-string
     (handler-bind
       ((error
          (lambda (err)
-           ; if we hit an error, print the backtrace to the stream before
-           ; reraising.  if we wait til later to print it, it'll be too late.
+           ; if we hit an error, get the stack trace before reraising.  if we
+           ; wait til later to print it, it'll be too late.
            (error 'evaluation-error
                   :text "Error during evaluation!"
                   :orig err
-                  :data (list
-                          "form" (prin1-to-string form)
-                          "backtrace" (clean-backtrace
-                                        #+sbcl (with-output-to-string (s)
-                                                 (sb-debug:print-backtrace
-                                                   :stream s
-                                                   :print-frame-source t
-                                                   :from :interrupted-frame))
-                                        #-sbcl "dunno"))))))
-      (eval form))))
+                  :data (let ((trace (dissect:stack)))
+                          (setf *last-trace* trace)
+                          (list
+                            "form" (prin1-to-string form)
+                            "backtrace" (string-trace trace)))))))
+      (dissect:with-truncated-stack ()
+        (eval form)))))
 
 
 (defun evaluate-forms (message forms &optional in-package)

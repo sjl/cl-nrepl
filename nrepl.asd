@@ -16,6 +16,7 @@
                #:fset
                #:cl-ppcre
                #:split-sequence
+               #:dissect
                #+sbcl :sb-introspect)
 
   :serial t
