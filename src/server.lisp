@@ -7,6 +7,11 @@
 
 ;;;; Plumbing
 (defun handle-base (message)
+  "Base handler function.
+
+  Just returns a fallback response if no earlier middleware handled the message.
+
+  "
   (respond message (make-map "status" '("unknown-op"))))
 
 (defun middleware ()
@@ -17,20 +22,20 @@
 
    "
   (list
-    #'wrap-session
-    #'wrap-session-ls
-    #'wrap-session-clone
-    #'wrap-session-close
-    #'wrap-describe
-    #'wrap-load-file
-    #'wrap-macroexpand
-    #'wrap-eval
-    #'wrap-documentation
-    #'wrap-arglist
+    'wrap-session
+    'wrap-session-ls
+    'wrap-session-clone
+    'wrap-session-close
+    'wrap-describe
+    'wrap-load-file
+    'wrap-macroexpand
+    'wrap-eval
+    'wrap-documentation
+    'wrap-arglist
     ))
 
 (defun build-handler (base middleware)
-  "Collapse the stack of middleware into a single handler function."
+  "Collapse the stack of `middleware` into a single handler function."
   (if middleware
     (funcall (car middleware)
              (build-handler base (cdr middleware)))
@@ -39,19 +44,19 @@
 (defun handle (message)
   "Handle the given NREPL message."
   (when *verbose-debug-output*
-    (log-message "Handling message: vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv~%")
-    (log-message "~A~%" message)
-    (log-message "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^~%"))
+    (log-message "~%; Handling message: vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv~%")
+    (log-message "~S~%" message)
+    (log-message "; ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^~%"))
   (funcall (build-handler #'handle-base (middleware)) message))
 
 (defun handle-message (socket-stream lock)
-  "Read and handle a single message from the socket."
+  "Read and handle a single message from `socket-stream`."
   (let ((message (fset:with (read-object socket-stream)
                    "transport" (partial #'write-object socket-stream lock))))
     (handle message)))
 
 (defun handler (socket-stream lock)
-  "Read a series of messages from the socket-stream, handling each."
+  "Read a series of messages from `socket-stream`, handling each."
   (log-message "Client connected...")
   (handler-case (loop (handle-message socket-stream lock))
     (end-of-file () nil))
@@ -76,7 +81,7 @@
 
 (defun accept-connections (server-socket)
   "Accept connections to the server and spawn threads to handle each."
-  (format t "Accepting connections...~%")
+  (log-message "Accepting connections...~%")
   (loop
     (let* ((client-socket (usocket:socket-accept
                             server-socket
@@ -90,9 +95,9 @@
             (handler socket-stream write-lock)
           (usocket:socket-close client-socket))))))
 
-(defun start-server (&optional (address "127.0.0.1") (port 8675))
+(defun start-server (&key (address "127.0.0.1") (port 8675))
   "Fire up a server thread that will listen for connections."
-  (format t "Starting server...~%")
+  (log-message "Starting server...~%")
   (let ((socket (usocket:socket-listen
                   address port
                   :reuse-address t
@@ -103,12 +108,13 @@
           (run-in-thread (format nil "NREPL Server (~a/~a)" address port)
             (unwind-protect
                 (accept-connections socket)
-              (format t "Closing server socket...~%")
+              (log-message "Closing server socket...~%")
               (usocket:socket-close socket))))))
 
 (defun stop-server ()
   "Kill the server thread, if it exists."
   (let ((s (shiftf *server-thread* nil)))
     (when s
+      (log-message "Stopping server...~%")
       (bt:destroy-thread s))))
 
