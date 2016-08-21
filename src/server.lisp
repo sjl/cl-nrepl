@@ -39,23 +39,23 @@
 (defun handle (message)
   "Handle the given NREPL message."
   (when *verbose-debug-output*
-    (l "Handling message: vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv~%")
-    (l "~A~%" message)
-    (l "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^~%"))
+    (log-message "Handling message: vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv~%")
+    (log-message "~A~%" message)
+    (log-message "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^~%"))
   (funcall (build-handler #'handle-base (middleware)) message))
 
 (defun handle-message (socket-stream lock)
   "Read and handle a single message from the socket."
   (let ((message (fset:with (read-object socket-stream)
-                   "transport" (curry #'write-object socket-stream lock))))
+                   "transport" (partial #'write-object socket-stream lock))))
     (handle message)))
 
 (defun handler (socket-stream lock)
   "Read a series of messages from the socket-stream, handling each."
-  (p "Client connected...")
+  (log-message "Client connected...")
   (handler-case (loop (handle-message socket-stream lock))
     (end-of-file () nil))
-  (p "Client disconnected..."))
+  (log-message "Client disconnected..."))
 
 
 ;;;; Server

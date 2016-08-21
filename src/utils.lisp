@@ -33,9 +33,9 @@
                  (read-next-from-string (subseq s pos) (cons i results))))))
     (nreverse (read-next-from-string s ()))))
 
-(defun curry (fn &rest curried-args)
-  (lambda (&rest args)
-    (apply fn (append curried-args args))))
+(defun partial (fn &rest args)
+  (lambda (&rest remaining-args)
+    (apply fn (append args remaining-args))))
 
 (defun random-uuid ()
   "Return a random UUID as a string."
@@ -46,12 +46,9 @@
         :collect key))
 
 
-(defun l (&rest args)
-  (apply #'format *log* args))
-
-(defun p (o)
-  (format *log* "~a~%" o)
-  o)
+(defun log-message (&rest args)
+  (apply #'format *log* args)
+  (force-output *log*))
 
 
 (defun respond (message response)
@@ -67,11 +64,11 @@
              "session" (fset:lookup message "session"))))
 
 
-(defmethod print-object ((object hash-table) stream)
-  (format stream "#HASH{~%~{~{    (~s : ~s)~}~%~}}"
-          (loop :for key :being :the :hash-keys :of object
-                :using (hash-value value)
-                :collect (list key value))))
+; (defmethod print-object ((object hash-table) stream)
+;   (format stream "#HASH{~%~{~{    (~s : ~s)~}~%~}}"
+;           (loop :for key :being :the :hash-keys :of object
+;                 :using (hash-value value)
+;                 :collect (list key value))))
 
 (defun parse-in-package (in-package)
   (if (null in-package)
