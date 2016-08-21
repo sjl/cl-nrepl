@@ -40,16 +40,18 @@
                (cons nil s)))))
     (destructuring-bind (package-name . symbol-name)
         (split-string (string-upcase name) #\:)
-      (find-symbol
-        symbol-name
-        (cond
-          ((null package-name) (parse-in-package in-package)) ; no : at all
-          ((string= "" package-name) (find-package "KEYWORD")) ; :keyw
-          (t (find-package package-name))))))) ; pack:sym
+      (let ((package
+              (cond
+                ((null package-name) (parse-in-package in-package)) ; no : at all
+                ((string= "" package-name) (find-package "KEYWORD")) ; :keyw
+                (t (find-package package-name))))) ; pack:sym
+        (when package
+          (find-symbol symbol-name package))))))
 
 
 (define-middleware wrap-documentation "documentation" message
-  (let ((s (find-symbol-harder (fset:lookup message "symbol"))))
+  (let ((s (find-symbol-harder (fset:lookup message "symbol")
+                               (fset:lookup message "in-package"))))
     (respond message
              (with-when
                  (make-map "status" '("done"))
@@ -65,9 +67,8 @@
                    (princ-to-string (cons s arglist))))))))
 
 (define-middleware wrap-arglist "arglist" message
-  (let ((s (find-symbol-harder
-             (fset:lookup message "symbol")
-             (fset:lookup message "in-package"))))
+  (let ((s (find-symbol-harder (fset:lookup message "symbol")
+                               (fset:lookup message "in-package"))))
     (respond message
              (with-when
                (make-map "status" '("done"))

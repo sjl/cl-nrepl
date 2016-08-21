@@ -76,4 +76,4 @@
 (defun parse-in-package (in-package)
   (if (null in-package)
     *package*
-    (find-package (read-from-string in-package))))
+    (or (find-package (read-from-string in-package)) *package*)))

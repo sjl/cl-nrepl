@@ -2,14 +2,15 @@
 
 (defun pretty-string (form)
   "Return a prettified string version of `form`, indented nicely."
-  #-ccl (format nil "~A" form)
-  ;; CCL's format doesn't indent forms nicely
-  #+ccl (with-output-to-string (*standard-output*)
-          (pprint form)))
+  (with-output-to-string (*standard-output*)
+    (let ((*print-pretty* t)
+          (*print-escape* t))
+      (write form))))
 
 (define-middleware wrap-macroexpand "macroexpand" message
   ;; TODO: handle mangled input
-  (let ((form (read-from-string (fset:lookup message "form"))))
+  (let* ((*package* (parse-in-package (fset:lookup message "in-package")))
+         (form (read-from-string (fset:lookup message "form"))))
     (respond message
              (make-map
                "status" '("done")
