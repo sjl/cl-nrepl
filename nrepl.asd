@@ -24,6 +24,7 @@
    (:module "src"
     :components ((:file "utils")
                  (:file "sockets")
+                 (:file "evaluation")
                  (:module "middleware"
                   :components ((:file "core")
                                (:file "describe")

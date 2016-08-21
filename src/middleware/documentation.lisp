@@ -1,22 +1,22 @@
 (in-package #:nrepl)
 
-(defun lambda-list-to-string (l)
+(defun lambda-list-to-string (lambda-list)
   "Return a single-line string of the lambda list."
-  (if (listp l)
-    (format nil "(~{~A~^ ~})" (mapcar #'lambda-list-to-string l))
-    (princ-to-string l)))
+  (if (listp lambda-list)
+    (format nil "(~{~A~^ ~})" (mapcar #'lambda-list-to-string lambda-list))
+    (princ-to-string lambda-list)))
 
-(defun find-lambda-list (s)
+(defun find-lambda-list (symbol)
   "Return the lambda list for the given symbol.
 
   Will return `nil` if none is found.  A second value is returned to indicate
   whether it was found.
 
   "
-  (if (fboundp s)
+  (if (fboundp symbol)
     (values
-      #+sbcl (sb-introspect:function-lambda-list s)
-      #+ccl (ccl:arglist s)
+      #+sbcl (sb-introspect:function-lambda-list symbol)
+      #+ccl (ccl:arglist symbol)
       t)
     (values nil nil)))
 
@@ -76,30 +76,26 @@
 
 
 (define-middleware wrap-documentation "documentation" message
-  (let ((s (find-symbol-harder (fset:lookup message "symbol")
-                               (fset:lookup message "in-package"))))
+  (let ((symbol (find-symbol-harder (fset:lookup message "symbol")
+                                    (fset:lookup message "in-package"))))
     (respond message
              (with-when
                  (make-map "status" '("done"))
-               "type-docstring" (documentation s 'type)
-               "structure-docstring" (documentation s 'structure)
-               "variable-docstring" (documentation s 'variable)
-               "setf-docstring" (documentation s 'setf)
-               "function-docstring" (documentation s 'function)
+               "type-docstring" (documentation symbol 'type)
+               "structure-docstring" (documentation symbol 'structure)
+               "variable-docstring" (documentation symbol 'variable)
+               "setf-docstring" (documentation symbol 'setf)
+               "function-docstring" (documentation symbol 'function)
                "function-arglist"
-               (multiple-value-bind (arglist foundp)
-                   (find-lambda-list s)
-                 (when foundp
-                   (princ-to-string (cons s arglist))))))))
+               (when-found arglist (find-lambda-list symbol)
+                 (princ-to-string (cons symbol arglist)))))))
 
 (define-middleware wrap-arglist "arglist" message
-  (let ((s (find-symbol-harder (fset:lookup message "symbol")
-                               (fset:lookup message "in-package"))))
+  (let ((symbol (find-symbol-harder (fset:lookup message "symbol")
+                                    (fset:lookup message "in-package"))))
     (respond message
              (with-when
-               (make-map "status" '("done"))
+                 (make-map "status" '("done"))
                "function-arglist"
-               (multiple-value-bind (arglist foundp)
-                   (find-lambda-list s)
-                 (when foundp
-                   (lambda-list-to-string (cons s arglist))))))))
+               (when-found arglist (find-lambda-list symbol)
+                 (lambda-list-to-string (cons symbol arglist)))))))

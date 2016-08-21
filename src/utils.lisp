@@ -73,3 +73,26 @@
   (if (or (null in-package) (string= in-package ""))
     *package*
     (or (find-package (read-from-string in-package)) *package*)))
+
+
+(defmacro when-found (var lookup-expr &body body)
+  "Perform `body` with `var` to the results of `lookup-expr`, when valid.
+
+  `lookup-expr` should be an expression that returns two values, the first being
+  the result (which will be bound to `var`) and the second indicating whether
+  the lookup was successful.  The standard `gethash` is an example of a function
+  that behaves like this.
+
+  Instead of:
+  (multiple-value-bind (val found) (gethash :foo hash)
+    (when found
+      body))
+
+  (when-found val (gethash :foo hash)
+              body)
+
+  "
+  (let ((found (gensym "found")))
+    `(multiple-value-bind (,var ,found) ,lookup-expr
+       (when ,found
+         ,@body))))

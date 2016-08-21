@@ -4,11 +4,11 @@
 (defvar *session* nil)
 
 
-(defun clear-sessions! ()
-  (setf *sessions* (make-hash-table :test #'equal)))
-
-(defun create-session ()
+(defun make-session ()
   (fset:empty-map))
+
+(defun clear-sessions! ()
+  (clrhash *sessions*))
 
 (defun register-session! (id session)
   (setf (gethash id *sessions*) session))
@@ -42,7 +42,7 @@
     (let* ((session-id (fset:lookup message "session"))
            (session (if session-id
                       (get-session session-id)
-                      (create-session)))
+                      (make-session)))
            (session-id (or session-id (random-uuid)))
            (*session* session))
       (funcall handler (fset:with message "session" session-id)))))

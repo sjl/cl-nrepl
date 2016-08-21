@@ -12,7 +12,7 @@
   (fset:convert 'fset:map (bencode:decode socket-stream)))
 
 
-;;; Patch in support for writing fset data types to bencode
+;;;; FSet+Bencode
 (defmethod bencode:encode ((fm fset:map) stream &key &allow-other-keys)
   (bencode:encode (fset:convert 'hash-table fm) stream))
 

@@ -5,4 +5,4 @@ syntax: glob
 *.swo
 *.un~
 tags
-src/scratch.lisp
+scratch.lisp
