@@ -64,13 +64,28 @@
 
 
 (defun parse-frame (frame)
-  (list* (dissect:call frame) (dissect:args frame)))
+  (let ((call-form (list* (dissect:call frame) (dissect:args frame)))
+        (location (list (dissect:file frame) (dissect:line frame))))
+    (list call-form location)))
 
 (defun parse-stack (stack)
   (mapcar #'parse-frame (nthcdr 1 (reverse stack))))
 
-(defun string-trace (stack)
-  (format nil "~{~S~^~%~}" (parse-stack stack)))
+(defun string-trace-whole (trace)
+  (with-output-to-string (s)
+    (loop :for (call-form (file line)) :in trace
+          :do (format s "~S~%" call-form))))
+
+(defun string-trace-components (trace)
+  (loop :for (call-form (file line)) :in trace
+        :collect (list (format nil "~S" call-form)
+                       (if file
+                         (format nil "~A" file)
+                         "")
+                       (if line
+                         (format nil "~D" line)
+                         ""))))
+
 
 (defun nrepl-evaluate-form (form)
   (declare (optimize (debug 3)))
@@ -83,11 +98,13 @@
            (error 'evaluation-error
                   :text "Error during evaluation!"
                   :orig err
-                  :data (let ((trace (dissect:stack)))
-                          (setf *last-trace* trace)
+                  :data (let* ((raw (dissect:stack))
+                               (clean (parse-stack raw)))
+                          (setf *last-trace* raw)
                           (list
                             "form" (prin1-to-string form)
-                            "backtrace" (string-trace trace)))))))
+                            "stack-trace" (string-trace-components clean)
+                            "stack-trace-string" (string-trace-whole clean)))))))
       (dissect:with-truncated-stack ()
         (eval form)))))
 
