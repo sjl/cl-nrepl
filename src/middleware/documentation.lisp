@@ -20,33 +20,59 @@
       t)
     (values nil nil)))
 
-(defun find-symbol-harder (name &optional in-package)
-  "Return the symbol object with the given `name`.
+
+(defun parse-symbol-designator-package (string in-package)
+  (let ((parts (split-sequence-if (partial #'char= #\:)
+                                  (string-upcase string))))
+    (case (length parts)
+      (0 nil)
+
+      ;; FOO -> ("FOO")
+      (1 (parse-in-package in-package))
+
+      ;; :FOO -> ("" "FOO")
+      ;; P:FOO -> ("P" "FOO")
+      (2 (if (string= (first parts) "")
+           (find-package "KEYWORD")
+           (parse-in-package in-package)))
+
+      ;; P::FOO -> ("P" "" "FOO")
+      (3 (find-package (first parts)))
+      (t nil))))
+
+(defun parse-symbol-designator-name (string)
+  (let ((parts (split-sequence-if (partial #'char= #\:)
+                                  (string-upcase string))))
+    (case (length parts)
+      (0 nil)
+
+      ;; FOO -> ("FOO")
+      (1 (first parts))
+
+      ;; :FOO -> ("" "FOO")
+      ;; P:FOO -> ("P" "FOO")
+      (2 (second parts))
+
+      ;; P::FOO -> ("P" "" "FOO")
+      (3 (third parts))
+
+      (t nil))))
+
+(defun find-symbol-harder (symbol-designator &optional in-package)
+  "Return the symbol object with the given `symbol-designator`.
 
   This should work with names like:
 
-    FOO (assumes the current package)
+    FOO (uses the `in-package` designator)
     P:FOO (looks in package P)
+    P::FOO (looks in package P)
     :FOO (keyword)
 
   "
-  ;; TODO: add support for:
-  ;;   P::FOO
-  (flet ((split-string (s delim)
-           (let ((idx (position delim s)))
-             (if idx
-               (cons (subseq s 0 idx)
-                     (subseq s (1+ idx)))
-               (cons nil s)))))
-    (destructuring-bind (package-name . symbol-name)
-        (split-string (string-upcase name) #\:)
-      (let ((package
-              (cond
-                ((null package-name) (parse-in-package in-package)) ; no : at all
-                ((string= "" package-name) (find-package "KEYWORD")) ; :keyw
-                (t (find-package package-name))))) ; pack:sym
-        (when package
-          (find-symbol symbol-name package))))))
+  (let ((package (parse-symbol-designator-package symbol-designator in-package))
+        (name (parse-symbol-designator-name symbol-designator)))
+    (when (and name package)
+      (find-symbol name package))))
 
 
 (define-middleware wrap-documentation "documentation" message

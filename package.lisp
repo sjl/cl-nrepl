@@ -1,9 +1,9 @@
-;;;; package.lisp
-
 (defpackage #:nrepl
-  (:use #:cl)
+  (:use
+    #:cl
+    #:split-sequence)
   (:import-from :ppcre
-                :regex-replace)
+    :regex-replace)
   (:export #:start-server
-           #:stop-server))
+    #:stop-server))
 

@@ -50,7 +50,6 @@
   (apply #'format *log* args)
   (force-output *log*))
 
-
 (defun respond (message response)
   "Respond to `message` with the `response` map.
 
@@ -71,6 +70,6 @@
 ;                 :collect (list key value))))
 
 (defun parse-in-package (in-package)
-  (if (null in-package)
+  (if (or (null in-package) (string= in-package ""))
     *package*
     (or (find-package (read-from-string in-package)) *package*)))
