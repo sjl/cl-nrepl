@@ -17,7 +17,7 @@
                #:cl-ppcre
                #:split-sequence
                #:dissect
-               #+sbcl :sb-introspect)
+               #:trivial-arguments)
 
   :serial t
   :components

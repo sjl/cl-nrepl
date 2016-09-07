@@ -14,12 +14,10 @@
 
   "
   (if (fboundp symbol)
-    (values
-      #+sbcl (sb-introspect:function-lambda-list symbol)
-      #+ccl (ccl:arglist symbol)
-      #+abcl (sys::arglist symbol)
-      #-(or sbcl ccl abcl) nil
-      t)
+    (let ((arglist (trivial-arguments:arglist symbol)))
+      (if (eql :unknown arglist)
+        (values nil nil)
+        (values arglist t)))
     (values nil nil)))
 
 
