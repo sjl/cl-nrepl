@@ -17,6 +17,8 @@
     (values
       #+sbcl (sb-introspect:function-lambda-list symbol)
       #+ccl (ccl:arglist symbol)
+      #+abcl (sys::arglist symbol)
+      #-(or sbcl ccl abcl) nil
       t)
     (values nil nil)))
 
