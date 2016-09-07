@@ -63,12 +63,6 @@
              "session" (fset:lookup message "session"))))
 
 
-; (defmethod print-object ((object hash-table) stream)
-;   (format stream "#HASH{~%~{~{    (~s : ~s)~}~%~}}"
-;           (loop :for key :being :the :hash-keys :of object
-;                 :using (hash-value value)
-;                 :collect (list key value))))
-
 (defun parse-in-package (in-package)
   (if (or (null in-package) (string= in-package ""))
     *package*
