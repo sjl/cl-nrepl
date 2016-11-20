@@ -11,7 +11,6 @@
   :depends-on (
                :bencode
                :bordeaux-threads
-               :cl-ppcre
                :dissect
                :flexi-streams
                :fset
