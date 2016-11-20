@@ -1,4 +1,4 @@
-(in-package #:nrepl)
+(in-package :nrepl)
 
 (defun lambda-list-to-string (lambda-list)
   "Return a single-line string of the lambda list."

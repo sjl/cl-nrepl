@@ -1,4 +1,4 @@
-(asdf:defsystem #:nrepl
+(asdf:defsystem :nrepl
   :name "nrepl"
   :description "An implementation of the NREPL protocol for Common Lisp."
 
@@ -8,25 +8,27 @@
   :license "EPL"
   :version "0.0.1"
 
-  :depends-on (#:bencode
-               #:usocket
-               #:flexi-streams
-               #:bordeaux-threads
-               #:uuid
-               #:fset
-               #:cl-ppcre
-               #:split-sequence
-               #:dissect
-               #:trivial-arguments)
+  :depends-on (
+               :bencode
+               :bordeaux-threads
+               :cl-ppcre
+               :dissect
+               :flexi-streams
+               :fset
+               :split-sequence
+               :trivial-arguments
+               :usocket
+               :uuid
+               )
 
   :serial t
   :components
   ((:file "package")
-   (:module "src"
+   (:module "src" :serial t
     :components ((:file "utils")
                  (:file "sockets")
                  (:file "evaluation")
-                 (:module "middleware"
+                 (:module "middleware" :serial t
                   :components ((:file "core")
                                (:file "describe")
                                (:file "documentation")

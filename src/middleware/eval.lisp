@@ -1,4 +1,4 @@
-(in-package #:nrepl)
+(in-package :nrepl)
 
 (define-middleware wrap-eval "eval" message
   (evaluate-forms message

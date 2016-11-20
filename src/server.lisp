@@ -1,4 +1,4 @@
-(in-package #:nrepl)
+(in-package :nrepl)
 
 ;;;; Config
 (defvar *verbose-debug-output* nil)

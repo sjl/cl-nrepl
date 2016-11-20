@@ -1,4 +1,4 @@
-(in-package #:nrepl)
+(in-package :nrepl)
 
 (defvar *sessions* (make-hash-table :test #'equal))
 (defvar *session* nil)

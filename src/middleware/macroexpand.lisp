@@ -1,4 +1,4 @@
-(in-package #:nrepl)
+(in-package :nrepl)
 
 (defun pretty-string (form)
   "Return a prettified string version of `form`, indented nicely."

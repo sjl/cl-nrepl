@@ -1,4 +1,4 @@
-(in-package #:nrepl)
+(in-package :nrepl)
 
 ;;;; In/out
 (defun write-object (socket-stream lock map)

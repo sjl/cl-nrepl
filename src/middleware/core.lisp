@@ -1,4 +1,4 @@
-(in-package #:nrepl)
+(in-package :nrepl)
 
 (defvar *middleware* (fset:empty-map))
 

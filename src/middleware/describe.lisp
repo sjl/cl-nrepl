@@ -1,4 +1,4 @@
-(in-package #:nrepl)
+(in-package :nrepl)
 
 (defun make-version-map (major minor incremental)
   (make-map "major" major

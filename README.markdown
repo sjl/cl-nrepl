@@ -7,6 +7,8 @@
  \______||_______|    |__| \__| | _| `._____||_______|| _|      |_______|
 ```
 
-An NREPL server for Common Lisp.
+A bare-bones [NREPL][] server for Common Lisp.
 
-**Not ready yet, don't use this.**
+**Not ready yet, don't use unless you want to help me build it.**
+
+[NREPL]: https://github.com/clojure/tools.nrepl/
