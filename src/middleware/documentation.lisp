@@ -22,7 +22,7 @@
 
 
 (defun parse-symbol-designator-package (string in-package)
-  (let ((parts (split-sequence-if (partial #'char= #\:)
+  (let ((parts (split-sequence-if (curry #'char= #\:)
                                   (string-upcase string))))
     (case (length parts)
       (0 nil)
@@ -41,7 +41,7 @@
       (t nil))))
 
 (defun parse-symbol-designator-name (string)
-  (let ((parts (split-sequence-if (partial #'char= #\:)
+  (let ((parts (split-sequence-if (curry #'char= #\:)
                                   (string-upcase string))))
     (case (length parts)
       (0 nil)
@@ -87,7 +87,7 @@
                "setf-docstring" (documentation symbol 'setf)
                "function-docstring" (documentation symbol 'function)
                "function-arglist"
-               (when-found arglist (find-lambda-list symbol)
+               (when-found (arglist (find-lambda-list symbol))
                  (princ-to-string (cons symbol arglist)))))))
 
 (define-middleware wrap-arglist "arglist" message
@@ -97,5 +97,5 @@
              (with-when
                  (make-map "status" '("done"))
                "function-arglist"
-               (when-found arglist (find-lambda-list symbol)
+               (when-found (arglist (find-lambda-list symbol))
                  (lambda-list-to-string (cons symbol arglist)))))))

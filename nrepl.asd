@@ -21,19 +21,21 @@
                )
 
   :serial t
-  :components
-  ((:file "package")
-   (:module "src" :serial t
-    :components ((:file "utils")
-                 (:file "sockets")
-                 (:file "evaluation")
-                 (:module "middleware" :serial t
-                  :components ((:file "core")
-                               (:file "describe")
-                               (:file "documentation")
-                               (:file "macroexpand")
-                               (:file "eval")
-                               (:file "load-file")
-                               (:file "session")))
-                 (:file "server")))))
+  :components ((:module "vendor" :serial t
+                :components ((:file "quickutils-package")
+                             (:file "quickutils")))
+               (:file "package")
+               (:module "src" :serial t
+                :components ((:file "utils")
+                             (:file "sockets")
+                             (:file "evaluation")
+                             (:module "middleware" :serial t
+                              :components ((:file "core")
+                                           (:file "describe")
+                                           (:file "documentation")
+                                           (:file "macroexpand")
+                                           (:file "eval")
+                                           (:file "load-file")
+                                           (:file "session")))
+                             (:file "server")))))
 

@@ -3,14 +3,9 @@
 (defvar *log* *error-output*)
 
 
-(defun pairs (sequence)
-  "Return a list of cons pairs of the items of the riffle `sequence`."
-  (loop :for (a b) :on sequence :by #'cddr
-        :collect (cons a b)))
-
 (defun make-map (&rest keyvals)
   "Create an fset map of the given riffle of keys and values."
-  (fset:convert 'fset:map (pairs keyvals)))
+  (fset:convert 'fset:map (subdivide keyvals 2)))
 
 (defun with-when (map &rest keyvals)
   "Add the items in the `keyvals` riffle with non-nil values to `map`."
@@ -33,18 +28,9 @@
                  (read-next-from-string (subseq s pos) (cons i results))))))
     (nreverse (read-next-from-string s ()))))
 
-(defun partial (fn &rest args)
-  (lambda (&rest remaining-args)
-    (apply fn (append args remaining-args))))
-
 (defun random-uuid ()
   "Return a random UUID as a string."
   (format nil "~a" (uuid:make-v4-uuid)))
-
-(defun hash-keys (h)
-  (loop :for key :being :the :hash-keys :of h
-        :collect key))
-
 
 (defun log-message (&rest args)
   (apply #'format *log* args)
@@ -69,8 +55,8 @@
     (or (find-package (read-from-string in-package)) *package*)))
 
 
-(defmacro when-found (var lookup-expr &body body)
-  "Perform `body` with `var` to the results of `lookup-expr`, when valid.
+(defmacro when-found ((var lookup-expr) &body body)
+  "Perform `body` with `var` bound to the results of `lookup-expr`, when valid.
 
   `lookup-expr` should be an expression that returns two values, the first being
   the result (which will be bound to `var`) and the second indicating whether
@@ -82,11 +68,11 @@
     (when found
       body))
 
-  (when-found val (gethash :foo hash)
-              body)
+  (when-found (val (gethash :foo hash))
+    body)
 
   "
-  (let ((found (gensym "found")))
+  (with-gensyms (found)
     `(multiple-value-bind (,var ,found) ,lookup-expr
-       (when ,found
-         ,@body))))
+      (when ,found
+        ,@body))))

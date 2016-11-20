@@ -52,7 +52,7 @@
 (defun handle-message (socket-stream lock)
   "Read and handle a single message from `socket-stream`."
   (let ((message (fset:with (read-object socket-stream)
-                   "transport" (partial #'write-object socket-stream lock))))
+                   "transport" (curry #'write-object socket-stream lock))))
     (handle message)))
 
 (defun handler (socket-stream lock)

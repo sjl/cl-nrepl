@@ -14,7 +14,7 @@
   As the body is executing `message-binding` will be bound to the message map.
 
   "
-  (let ((fallback (gensym)))
+  (with-gensyms (fallback)
     `(defun ,name (,fallback)
       (lambda (,message-binding)
         (handle-op ,message-binding ,op ,fallback

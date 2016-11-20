@@ -20,7 +20,7 @@
   (gethash id *sessions*))
 
 (defun get-sessions ()
-  (hash-keys *sessions*))
+  (hash-table-keys *sessions*))
 
 
 (defun wrap-session (handler)

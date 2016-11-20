@@ -1,7 +1,8 @@
 (defpackage :nrepl
   (:use
     :cl
-    :split-sequence)
+    :split-sequence
+    :nrepl.quickutils)
   (:export
     :start-server
     :stop-server))
